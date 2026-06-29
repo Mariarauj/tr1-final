@@ -1,17 +1,8 @@
-'''
-Implementa demodulação para ASK, FSK, QPSK e 16-QAM.
-
-'''
-
 import numpy as np
 from camada_fisica.modulacao import _CONSTELACAO_QPSK, _CONSTELACAO_16QAM_INV
 
-
-
-# Demodulação Digital (banda-base)
+# Demodulação digital (Banda base)
 def demod_nrz_polar(sinal: np.ndarray) -> list[int]:
-    #NRZ-Polar: divide o sinal em blocos de 100 amostras e decide por limiar.
-
     amostras_por_bit = 100
     bits = []
     for i in range(0, len(sinal), amostras_por_bit):
@@ -23,10 +14,7 @@ def demod_nrz_polar(sinal: np.ndarray) -> list[int]:
 
 
 def demod_manchester(sinal: np.ndarray) -> list[int]:
-    #Manchester: cada bit ocupa 2 amostras; detecta transição alta→baixa (1) ou baixa→alta (0).
-   
-    # 200 amostras por bit (100 para cada metade)
-    amostras_por_bit = 200
+    amostras_por_bit = 200 #100 pra cada, baby
     bits = []
     for i in range(0, len(sinal), amostras_por_bit):
         segmento = sinal[i:i + amostras_por_bit]
@@ -40,8 +28,6 @@ def demod_manchester(sinal: np.ndarray) -> list[int]:
 
 
 def demod_bipolar(sinal: np.ndarray) -> list[int]:
-    #Bipolar (AMI): limiar zero — qualquer valor ≠ 0 é bit 1.
-
     amostras_por_bit = 100
     bits = []
     for i in range(0, len(sinal), amostras_por_bit):
@@ -55,8 +41,6 @@ def demod_bipolar(sinal: np.ndarray) -> list[int]:
 
 # Demodulação por Portadora
 def demod_ask(tempo: np.ndarray, sinal: np.ndarray) -> list[int]:
-    #ASK: compara energia média de cada segmento com limiar de 0,5.
-  
     amostras_por_bit = 100
     limiar = 0.5
     bits = []
@@ -69,9 +53,6 @@ def demod_ask(tempo: np.ndarray, sinal: np.ndarray) -> list[int]:
 
 
 def demod_fsk(tempo: np.ndarray, sinal: np.ndarray) -> list[int]:
-    #FSK: FFT por segmento para identificar frequência dominante.
-    #f1=2 Hz → bit 1, f0=1 Hz → bit 0.
-
     f1, f0 = 2, 1
     amostras_por_bit = 100
     bits = []
@@ -90,9 +71,6 @@ def demod_fsk(tempo: np.ndarray, sinal: np.ndarray) -> list[int]:
 
 
 def demod_qpsk(tempo: np.ndarray, sinal: np.ndarray) -> list[int]:
-    #QPSK: correlação com portadoras I e Q; busca o símbolo mais próximo.
-    #Retorna lista de bits (2 bits por símbolo).
-  
     fs = 1000
     f_portadora = 10
     duracao_simbolo = 0.1
@@ -120,9 +98,6 @@ def demod_qpsk(tempo: np.ndarray, sinal: np.ndarray) -> list[int]:
 
 
 def demod_qam16(tempo: np.ndarray, sinal: np.ndarray) -> list[int]:
-    #16-QAM: correlação com portadoras I e Q; busca o símbolo mais próximo.
-    #Retorna lista de bits (4 bits por símbolo).
-  
     fs = 1000
     f_portadora = 10
     duracao_simbolo = 0.1

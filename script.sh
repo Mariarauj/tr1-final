@@ -12,7 +12,7 @@ set -e
 
 VENV_DIR=".venv"
 
-echo "==> Verificando ambiente virtual…"
+echo "Verificando ambiente virtual…"
 if [ ! -d "$VENV_DIR" ]; then
     echo "    Criando venv em $VENV_DIR"
     python3 -m venv "$VENV_DIR"
@@ -20,12 +20,12 @@ fi
 
 source "$VENV_DIR/bin/activate"
 
-echo "==> Instalando dependências…"
+echo "Instalando dependências…"
 pip install --quiet --upgrade pip
 pip install --quiet -r requirements.txt
 
 echo ""
-echo "==> Iniciando modo: ${1:-ambos}"
+echo "Iniciando modo: ${1:-ambos}"
 echo ""
 
 case "${1:-ambos}" in
