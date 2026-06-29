@@ -2,7 +2,7 @@
 Transmissor - Lado TX do pipeline de simulação.
 Encapsula toda a cadeia de processamento:
   texto → bits → Hamming → detecção de erros → enquadramento
-  → modulação digital → modulação por portadora → envio TCP
+  → modulação digital → modulação por portadora → ruído gaussiano → envio TCP
 """
 import json
 import socket
@@ -26,7 +26,7 @@ from camada_fisica.modulacao import (
     nrz_polar, manchester, bipolar,
     ask, fsk, qpsk, qam16,
 )
-from camada_fisica.ruido import inverter_bit_aleatorio
+from camada_fisica.ruido import adicionar_ruido_gaussiano
 
 HOST = '127.0.0.1'
 PORT = 5000
@@ -41,11 +41,13 @@ class Transmitter:
         mod_portadora: str = 'ASK',
         enquadramento: str = 'Contagem de Caracteres',
         deteccao: str = 'CRC',
+        sigma_ruido: float = 0.05,
     ):
         self.mod_digital   = mod_digital
         self.mod_portadora = mod_portadora
         self.enquadramento = enquadramento
         self.deteccao      = deteccao
+        self.sigma_ruido   = sigma_ruido
 
     # ------------------------------------------------------------------
     # Pipeline de codificação (TX)
@@ -82,10 +84,6 @@ class Transmitter:
         else:                                   # Inserção de Bits
             return transmissor_insercao_bits(bits)
 
-    def simular_ruido(self, bits: str) -> str:
-        """Introduz ruído de canal (probabilístico)."""
-        return inverter_bit_aleatorio(bits)
-
     def modular_digital(self, bits: list[int]) -> np.ndarray:
         """Modulação digital (banda-base)."""
         if self.mod_digital == 'Manchester':
@@ -114,27 +112,34 @@ class Transmitter:
         """
         Executa a cadeia completa TX e retorna dicionário com
         todas as etapas intermediárias e os sinais produzidos.
+
+        O ruído gaussiano n(0, σ) é aplicado sobre os sinais analógicos
+        (após modulação), conforme diagrama do enunciado.
         """
         bits_brutos     = self.codificar_texto(texto)
         bits_hamming    = self.aplicar_hamming(bits_brutos)
         bits_deteccao   = self.aplicar_deteccao(bits_hamming)
         bits_enquadrado = self.aplicar_enquadramento(bits_deteccao)
-        bits_ruidosos   = self.simular_ruido(bits_enquadrado)
 
-        lista_bits = [int(b) for b in bits_ruidosos]
+        lista_bits = [int(b) for b in bits_enquadrado]
 
-        sinal_digital   = self.modular_digital(lista_bits)
-        sinal_portadora = self.modular_portadora(lista_bits)
+        # Modulação dos sinais analógicos
+        sinal_digital        = self.modular_digital(lista_bits)
+        tempo, sinal_portadora = self.modular_portadora(lista_bits)
+
+        # Ruído gaussiano n(0, σ) sobre os sinais analógicos — meio de comunicação
+        sinal_digital_ruidoso   = adicionar_ruido_gaussiano(sinal_digital,   self.sigma_ruido)
+        sinal_portadora_ruidosa = adicionar_ruido_gaussiano(sinal_portadora, self.sigma_ruido)
 
         return {
-            'texto'         : texto,
-            'bits_brutos'   : bits_brutos,
-            'bits_hamming'  : bits_hamming,
-            'bits_deteccao' : bits_deteccao,
+            'texto'          : texto,
+            'bits_brutos'    : bits_brutos,
+            'bits_hamming'   : bits_hamming,
+            'bits_deteccao'  : bits_deteccao,
             'bits_enquadrado': bits_enquadrado,
-            'bits_ruidosos' : bits_ruidosos,
-            'sinal_digital' : sinal_digital,
-            'sinal_portadora': sinal_portadora,
+            'bits_ruidosos'  : bits_enquadrado,          # mantido para exibição na UI
+            'sinal_digital'  : sinal_digital_ruidoso,
+            'sinal_portadora': (tempo, sinal_portadora_ruidosa),
         }
 
     # ------------------------------------------------------------------
@@ -144,18 +149,18 @@ class Transmitter:
     def enviar(self, resultado: dict, nome: str):
         """
         Serializa e envia os dados ao servidor receptor via TCP.
-        O sinal de portadora é enviado junto com os metadados necessários
-        para que o receptor possa demodular e decodificar.
+        O sinal de portadora (com ruído) é enviado junto com os metadados
+        necessários para que o receptor possa demodular e decodificar.
         """
         t, sinal = resultado['sinal_portadora']
 
         payload = {
-            'nome'          : nome,
-            'modulacao'     : self.mod_portadora,
-            'enquadramento' : self.enquadramento,
-            'deteccao'      : self.deteccao,
-            'tempo'         : t.tolist() if hasattr(t, 'tolist') else list(t),
-            'sinal'         : sinal.tolist() if hasattr(sinal, 'tolist') else list(sinal),
+            'nome'         : nome,
+            'modulacao'    : self.mod_portadora,
+            'enquadramento': self.enquadramento,
+            'deteccao'     : self.deteccao,
+            'tempo'        : t.tolist() if hasattr(t, 'tolist') else list(t),
+            'sinal'        : sinal.tolist() if hasattr(sinal, 'tolist') else list(sinal),
         }
 
         dados = json.dumps(payload).encode('utf-8')
