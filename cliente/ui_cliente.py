@@ -9,7 +9,10 @@ from gi.repository import Gtk, Gdk, Pango
 
 import numpy as np
 import matplotlib
-matplotlib.use('GTK3Agg')
+import matplotlib
+matplotlib.rcParams['text.usetex'] = False
+matplotlib.rcParams['font.size'] = 9
+matplotlib.rcParams['figure.dpi'] = 80  
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_gtk3agg import FigureCanvasGTK3Agg as FigureCanvas
 
@@ -143,15 +146,41 @@ class ClienteUI(Gtk.Window):
         frame_graficos = Gtk.Frame(label=' Sinais ')
         raiz.pack_start(frame_graficos, True, True, 0)
 
-        self.scroll_graf = Gtk.ScrolledWindow()
-        self.scroll_graf.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        self.scroll_graf.set_min_content_height(360)
-        self.scroll_graf.set_hexpand(True)
-        self.scroll_graf.set_vexpand(True)
-        frame_graficos.add(self.scroll_graf)
+        box_graficos = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box_graficos.set_margin_top(4)
+        box_graficos.set_margin_bottom(4)
+        box_graficos.set_margin_start(4)
+        box_graficos.set_margin_end(4)
+        frame_graficos.add(box_graficos)
 
-        self.canvas = None
+        # Rótulo do gráfico digital (GTK, fora do Matplotlib)
+        self.lbl_titulo_digital = Gtk.Label()
+        self.lbl_titulo_digital.set_markup('<b>Digital</b>')
+        self.lbl_titulo_digital.set_xalign(0.0)
+        box_graficos.pack_start(self.lbl_titulo_digital, False, False, 0)
 
+        self.scroll_graf1 = Gtk.ScrolledWindow()
+        self.scroll_graf1.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        self.scroll_graf1.set_min_content_height(200)
+        self.scroll_graf1.set_hexpand(True)
+        self.scroll_graf1.set_vexpand(True)
+        box_graficos.pack_start(self.scroll_graf1, True, True, 0)
+
+        # Rótulo do gráfico de portadora (GTK, fora do Matplotlib)
+        self.lbl_titulo_portadora = Gtk.Label()
+        self.lbl_titulo_portadora.set_markup('<b>Portadora</b>')
+        self.lbl_titulo_portadora.set_xalign(0.0)
+        box_graficos.pack_start(self.lbl_titulo_portadora, False, False, 0)
+
+        self.scroll_graf2 = Gtk.ScrolledWindow()
+        self.scroll_graf2.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        self.scroll_graf2.set_min_content_height(200)
+        self.scroll_graf2.set_hexpand(True)
+        self.scroll_graf2.set_vexpand(True)
+        box_graficos.pack_start(self.scroll_graf2, True, True, 0)
+
+        self.canvas1 = None
+        self.canvas2 = None
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -233,39 +262,64 @@ class ClienteUI(Gtk.Window):
             self._aviso(str(exc))
 
     def _atualizar_graficos(self, resultado: dict):
-        """Renderiza os dois gráficos (digital + portadora) no canvas GTK."""
-        # Remove canvas anterior
-        for filho in self.scroll_graf.get_children():
-            self.scroll_graf.remove(filho)
+        from matplotlib.figure import Figure
 
         mod_digital   = self.transmitter.mod_digital
         mod_portadora = self.transmitter.mod_portadora
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 7),
-                                        gridspec_kw={'hspace': 0.45})
+        # Atualiza rótulos GTK
+        self.lbl_titulo_digital.set_markup(f'<b>Digital — {mod_digital}</b>')
+        self.lbl_titulo_portadora.set_markup(f'<b>Portadora — {mod_portadora}</b>')
+
+        MAX_PTS = 1000
 
         # --- Gráfico 1: sinal digital ---
+        for filho in self.scroll_graf1.get_children():
+            self.scroll_graf1.remove(filho)
+
         sinal_d = resultado['sinal_digital']
-        x_d = np.arange(len(sinal_d))
-        ax1.step(x_d, sinal_d, where='post', color='steelblue', linewidth=1.2)
-        ax1.set_title(f'Modulação Digital — {mod_digital}', fontsize=11)
-        ax1.set_xlabel('Amostras')
-        ax1.set_ylabel('Amplitude (V)')
-        ax1.axhline(0, color='black', linewidth=0.6, linestyle='--')
-        ax1.grid(True, alpha=0.4)
+        if len(sinal_d) > MAX_PTS:
+            idx = np.linspace(0, len(sinal_d) - 1, MAX_PTS, dtype=int)
+            sinal_d = sinal_d[idx]
+
+        fig1 = Figure(figsize=(12, 2.5), dpi=80)
+        ax1  = fig1.add_subplot(1, 1, 1)
+        fig1.subplots_adjust(top=0.95, bottom=0.05, left=0.01, right=0.99)
+        ax1.set_xticks([])
+        ax1.set_yticks([])
+        ax1.tick_params(labelbottom=False, labelleft=False,
+                        labeltop=False, labelright=False)
+        ax1.step(range(len(sinal_d)), sinal_d, where='post',
+                color='steelblue', linewidth=1.0)
+        ax1.grid(True, alpha=0.3)
+
+        self.canvas1 = FigureCanvas(fig1)
+        self.canvas1.set_size_request(900, 200)
+        self.scroll_graf1.add(self.canvas1)
 
         # --- Gráfico 2: sinal de portadora ---
+        for filho in self.scroll_graf2.get_children():
+            self.scroll_graf2.remove(filho)
+
         tempo, sinal_p = resultado['sinal_portadora']
-        ax2.plot(tempo, sinal_p, color='darkorange', linewidth=0.9)
-        ax2.set_title(f'Modulação por Portadora — {mod_portadora}', fontsize=11)
-        ax2.set_xlabel('Tempo (s)')
-        ax2.set_ylabel('Amplitude (V)')
-        ax2.grid(True, alpha=0.4)
+        if len(sinal_p) > MAX_PTS:
+            idx = np.linspace(0, len(sinal_p) - 1, MAX_PTS, dtype=int)
+            tempo   = tempo[idx]
+            sinal_p = sinal_p[idx]
 
-        fig.tight_layout()
+        fig2 = Figure(figsize=(12, 2.5), dpi=80)
+        ax2  = fig2.add_subplot(1, 1, 1)
+        fig2.subplots_adjust(top=0.95, bottom=0.05, left=0.01, right=0.99)
+        ax2.set_xticks([])
+        ax2.set_yticks([])
+        ax2.tick_params(labelbottom=False, labelleft=False,
+                        labeltop=False, labelright=False)
+        ax2.plot(tempo, sinal_p, color='darkorange', linewidth=0.8)
+        ax2.grid(True, alpha=0.3)
 
-        self.canvas = FigureCanvas(fig)
-        self.canvas.set_size_request(900, 500)
-        self.scroll_graf.add(self.canvas)
-        self.scroll_graf.show_all()
-        plt.close(fig)
+        self.canvas2 = FigureCanvas(fig2)
+        self.canvas2.set_size_request(900, 200)
+        self.scroll_graf2.add(self.canvas2)
+
+        self.scroll_graf1.show_all()
+        self.scroll_graf2.show_all()

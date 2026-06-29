@@ -5,7 +5,7 @@ Implementa codificação e decodificação com correção de 1 bit de erro.
 
 
 def _posicoes_paridade(n_total: int) -> list[int]:
-    """Retorna posições (1-indexadas) reservadas para bits de paridade."""
+    #registra os locais dos bits de paridade 
     pos = []
     p = 1
     while p <= n_total:
@@ -15,16 +15,13 @@ def _posicoes_paridade(n_total: int) -> list[int]:
 
 
 def transmissor_hamming(bits: str) -> str:
-    """
-    Codifica uma string de bits usando o código de Hamming.
-    Bits de paridade são inseridos nas posições que são potência de 2.
+    '''
+    Codifica a palavra a ser enviada 
 
-    Parâmetros:
-    - bits: string de bits de dado
+    Parâmetros: palavra (string de bits)
 
-    Retorno:
-    - string de bits com código de Hamming incorporado
-    """
+    Retorno: palavra codificada com os bits de paridade
+    '''
     n_dados = len(bits)
 
     # Calcula número de bits de paridade necessários: 2^r >= n + r + 1
@@ -38,13 +35,13 @@ def transmissor_hamming(bits: str) -> str:
     # Preenche posições de dados (pula as posições de paridade)
     j = 0
     for i in range(1, n_total + 1):
-        if i & (i - 1) != 0:          # não é potência de 2 → posição de dado
+        if i & (i - 1) != 0:   
             codificado[i - 1] = int(bits[j])
             j += 1
 
     # Calcula bits de paridade
     for k in range(r):
-        pos_par = 1 << k               # potência de 2
+        pos_par = 1 << k       
         paridade = 0
         for i in range(1, n_total + 1):
             if i & pos_par:
@@ -55,17 +52,15 @@ def transmissor_hamming(bits: str) -> str:
 
 
 def receptor_hamming(bits: str) -> tuple[str, int]:
-    """
+    '''
     Decodifica e corrige (se necessário) uma mensagem com código de Hamming.
 
-    Parâmetros:
-    - bits: string de bits com código de Hamming
+    Parâmetro: palavra codificada
 
     Retorno:
-    - (dados_corrigidos, pos_erro):
         - dados_corrigidos: string de bits de dado sem os bits de paridade
         - pos_erro: posição do bit com erro (1-indexada) ou 0 se não há erro
-    """
+    '''
     n_total = len(bits)
     codificado = [int(b) for b in bits]
 
@@ -85,7 +80,7 @@ def receptor_hamming(bits: str) -> tuple[str, int]:
         if paridade != 0:
             pos_erro += pos_par
 
-    # Corrige o bit errado (se houver)
+    # Corrige o bit errado (se tiver né)
     if 0 < pos_erro <= n_total:
         codificado[pos_erro - 1] ^= 1
 
