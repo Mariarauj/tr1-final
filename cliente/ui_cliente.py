@@ -5,7 +5,7 @@ visualizando os sinais digitais e de portadora em tempo real.
 """
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, Pango
+from gi.repository import Gtk, Gdk, Pango # type: ignore
 
 import numpy as np
 import matplotlib
