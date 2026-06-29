@@ -1,20 +1,16 @@
-"""
-Camada Física - Modulação
-Implementa modulações digitais (NRZ-Polar, Manchester, Bipolar)
-e modulações por portadora (ASK, FSK, QPSK, 16-QAM).
-"""
+'''Implementa modulações digitais (NRZ-Polar, Manchester, Bipolar)
+              modulações por portadora (ASK, FSK, QPSK, 16-QAM).
+
+'''
 import numpy as np
 
 
-# ---------------------------------------------------------------------------
-# Modulações Digitais (banda-base)
-# ---------------------------------------------------------------------------
 
+# Modulações Digitais (banda-base)
 def nrz_polar(dados: list[int]) -> np.ndarray:
-    """
-    NRZ-Polar: bit 1 → +V, bit 0 → -V.
-    Retorna array de amostras (100 amostras por bit).
-    """
+    #NRZ-Polar: bit 1 → +V, bit 0 → -V.
+    #Retorna array de amostras (100 amostras por bit).
+    
     V = 1
     amostras_por_bit = 100
     sinal = np.array([-V if bit == 0 else V for bit in dados])
@@ -22,10 +18,9 @@ def nrz_polar(dados: list[int]) -> np.ndarray:
 
 
 def manchester(dados: list[int]) -> np.ndarray:
-    """
-    Manchester: bit 1 → transição alta-para-baixa (+V,-V),
-                bit 0 → transição baixa-para-alta (-V,+V).
-    """
+    #Manchester: bit 1 → transição alta-para-baixa (+V,-V),
+    #            bit 0 → transição baixa-para-alta (-V,+V).
+   
     V = 1
     sinal = []
     for bit in dados:
@@ -37,9 +32,8 @@ def manchester(dados: list[int]) -> np.ndarray:
 
 
 def bipolar(dados: list[int]) -> np.ndarray:
-    """
-    Bipolar (AMI): bit 0 → 0V, bit 1 → alterna entre +V e -V.
-    """
+    #Bipolar (AMI): bit 0 → 0V, bit 1 → alterna entre +V e -V.
+    
     V = 1
     estado = 1
     sinal = []
@@ -52,15 +46,12 @@ def bipolar(dados: list[int]) -> np.ndarray:
     return np.repeat(np.array(sinal, dtype=float), 100)
 
 
-# ---------------------------------------------------------------------------
-# Modulações por Portadora
-# ---------------------------------------------------------------------------
 
+# Modulações por Portadora
 def ask(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
-    """
-    ASK: bit 1 → senoide com amplitude A, bit 0 → amplitude zero.
-    Retorna (tempo, sinal).
-    """
+    #ASK: bit 1 → senoide com amplitude A, bit 0 → amplitude zero.
+    #Retorna (tempo, sinal).
+   
     A = 1
     f = 2          # Hz
     amostras_por_bit = 100
@@ -77,10 +68,9 @@ def ask(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
 
 
 def fsk(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
-    """
-    FSK: bit 1 → frequência f1=2 Hz, bit 0 → frequência f0=1 Hz.
-    Retorna (tempo, sinal).
-    """
+    #FSK: bit 1 → frequência f1=2 Hz, bit 0 → frequência f0=1 Hz.
+    #Retorna (tempo, sinal).
+    
     A = 1
     f1, f0 = 2, 1
     amostras_por_bit = 100
@@ -103,10 +93,9 @@ _CONSTELACAO_QPSK = {
 }
 
 def qpsk(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
-    """
-    QPSK: 2 bits por símbolo, 4 pontos na constelação.
-    Retorna (tempo, sinal).
-    """
+    #QPSK: 2 bits por símbolo, 4 pontos na constelação.
+    #Retorna (tempo, sinal).
+    
     bits_str = ''.join(map(str, dados))
     # Padding para múltiplo de 2
     if len(bits_str) % 2 != 0:
@@ -143,10 +132,9 @@ _CONSTELACAO_16QAM_INV = {v: k for k, v in _CONSTELACAO_16QAM.items()}
 
 
 def qam16(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
-    """
-    16-QAM: 4 bits por símbolo, 16 pontos na constelação.
-    Retorna (tempo, sinal).
-    """
+    #16-QAM: 4 bits por símbolo, 16 pontos na constelação.
+    #Retorna (tempo, sinal).
+    
     bits_str = ''.join(map(str, dados))
     # Padding para múltiplo de 4
     padding = (4 - len(bits_str) % 4) % 4

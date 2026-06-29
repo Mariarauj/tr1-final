@@ -1,8 +1,9 @@
-"""
-Camada Física - Ruído
+'''
 Simula ruído gaussiano no meio de comunicação conforme especificado
 no diagrama de desenvolvimento: n(x, σ) sobre os valores em V/W.
-"""
+
+'''
+
 import numpy as np
 import random
 
@@ -12,31 +13,16 @@ TAXA_ERRO = 0.3
 
 
 def adicionar_ruido_gaussiano(sinal: np.ndarray, sigma: float = 0.05) -> np.ndarray:
-    """
-    Adiciona ruído gaussiano n(0, σ) ao sinal contínuo (V/W).
+    #Adiciona ruído gaussiano n(0, σ) ao sinal contínuo (V/W).
 
-    Parâmetros:
-    - sinal: array numpy com o sinal analógico
-    - sigma: desvio padrão do ruído (em V/W)
-
-    Retorno:
-    - sinal com ruído aditivo gaussiano
-    """
     ruido = np.random.normal(0, sigma, len(sinal))
     return sinal + ruido
 
 
 def inverter_bit_aleatorio(bits_str: str) -> str:
-    """
-    Simula erro no canal digital invertendo um bit aleatório com
-    probabilidade TAXA_ERRO. Usado para testar detecção e correção de erros.
+    #Simula erro no canal digital invertendo um bit aleatório com
+    #probabilidade TAXA_ERRO. Usado para testar detecção e correção de erros.
 
-    Parâmetros:
-    - bits_str: string de bits
-
-    Retorno:
-    - string de bits, possivelmente com um bit invertido
-    """
     if not bits_str:
         return bits_str
     copia = list(bits_str)

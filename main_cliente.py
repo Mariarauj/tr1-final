@@ -1,11 +1,8 @@
-"""
-Ponto de entrada do Transmissor.
-Execute com:
-    python main_cliente.py
-"""
+#python main_cliente.py
+
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk
+from gi.repository import Gtk # type: ignore
 
 from cliente.ui_cliente import ClienteUI
 

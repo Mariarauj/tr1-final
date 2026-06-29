@@ -1,29 +1,16 @@
-"""
-Camada de Enlace - Enquadramento
+'''
 Implementa os três tipos de enquadramento exigidos:
   1. Contagem de caracteres
   2. Inserção de bytes (flags + ESC byte)
   3. Inserção de bits  (flag 01111110 + bit stuffing)
-"""
 
-# ---------------------------------------------------------------------------
+'''
+
+#Retorna -1 em caso de erro
 # 1. Contagem de caracteres
-# ---------------------------------------------------------------------------
-
 def transmissor_contagem(bits: str, tamanho_quadro: int = 6) -> str:
-    """
-    Enquadra uma string de bits usando contagem de bytes.
-    Cada quadro é prefixado por 1 byte indicando quantos bytes de dado contém.
-
-    Parâmetros:
-    - bits: string de bits (deve ser múltiplo de 8)
-    - tamanho_quadro: número máximo de bytes de dado por quadro
-
-    Retorno:
-    - string de bits enquadrada, ou -1 em caso de erro
-    """
     if len(bits) % 8 != 0:
-        return -1
+        return '-1'
 
     lista_bytes = [bits[i:i+8] for i in range(0, len(bits), 8)]
     total = len(lista_bytes)
@@ -40,17 +27,8 @@ def transmissor_contagem(bits: str, tamanho_quadro: int = 6) -> str:
 
 
 def receptor_contagem(bits: str) -> str:
-    """
-    Desenquadra uma string de bits com contagem de bytes.
-
-    Parâmetros:
-    - bits: string de bits enquadrada
-
-    Retorno:
-    - string de bits de dado, ou -1 em caso de erro
-    """
     if len(bits) % 8 != 0:
-        return -1
+        return '-1'
 
     conteudo = ''
     num_bytes = len(bits) // 8
@@ -61,7 +39,7 @@ def receptor_contagem(bits: str) -> str:
         n = int(cabecalho, 2)
         idx += 1
         if idx + n > num_bytes:
-            return -1
+            return '-1'
         for _ in range(n):
             conteudo += bits[idx*8:(idx+1)*8]
             idx += 1
@@ -69,29 +47,14 @@ def receptor_contagem(bits: str) -> str:
     return conteudo
 
 
-# ---------------------------------------------------------------------------
-# 2. Inserção de bytes (byte stuffing)
-# ---------------------------------------------------------------------------
-
-_FLAG_IB  = '00100110'   # '&'  (0x26)
-_ESC_IB   = '00011011'   # ESC  (0x1B)
+# 2. Inserção de bytes
+_FLAG_IB  = '00100110'   # '&' (0x26)
+_ESC_IB   = '00011011'   # ESC (0x1B)
 
 
 def transmissor_insercao_bytes(bits: str, tamanho_quadro: int = 6) -> str:
-    """
-    Enquadra uma string de bits usando inserção de bytes.
-    Separa os dados em quadros delimitados por FLAG.
-    Bytes FLAG e ESC nos dados são precedidos por ESC.
-
-    Parâmetros:
-    - bits: string de bits (deve ser múltiplo de 8)
-    - tamanho_quadro: número máximo de bytes de dado por quadro
-
-    Retorno:
-    - string de bits enquadrada, ou -1 em caso de erro
-    """
     if len(bits) % 8 != 0:
-        return -1
+        return '-1'
 
     lista_bytes = [bits[i:i+8] for i in range(0, len(bits), 8)]
     quadros = ''
@@ -112,17 +75,8 @@ def transmissor_insercao_bytes(bits: str, tamanho_quadro: int = 6) -> str:
 
 
 def receptor_insercao_bytes(bits: str) -> str:
-    """
-    Desenquadra uma string de bits com inserção de bytes.
-
-    Parâmetros:
-    - bits: string de bits enquadrada com FLAGS e ESC
-
-    Retorno:
-    - string de bits de dado, ou -1 em caso de erro
-    """
     if len(bits) % 8 != 0:
-        return -1
+        return '-1'
 
     conteudo = ''
     num_bytes = len(bits) // 8
@@ -137,7 +91,7 @@ def receptor_insercao_bytes(bits: str) -> str:
                 conteudo += prox
                 idx += 2
             else:
-                return -1
+                return '-1'
         elif byte == _FLAG_IB:
             idx += 1
         else:
@@ -146,26 +100,10 @@ def receptor_insercao_bytes(bits: str) -> str:
 
     return conteudo
 
-
-# ---------------------------------------------------------------------------
 # 3. Inserção de bits (bit stuffing)
-# ---------------------------------------------------------------------------
+_FLAG_BITS = '01111110' 
 
-_FLAG_BITS = '01111110'   # delimitador de quadro
-
-
-def transmissor_insercao_bits(bits: str) -> str:
-    """
-    Enquadra uma string de bits usando inserção de bits.
-    Após cinco '1' consecutivos nos dados, insere um '0'.
-    O quadro é delimitado por FLAGS (01111110).
-
-    Parâmetros:
-    - bits: string de bits de qualquer comprimento
-
-    Retorno:
-    - string de bits enquadrada
-    """
+def transmissor_insercao_bits(bits: str) -> str:   
     stuffed = ''
     contagem_uns = 0
 
@@ -174,7 +112,7 @@ def transmissor_insercao_bits(bits: str) -> str:
         if bit == '1':
             contagem_uns += 1
             if contagem_uns == 5:
-                stuffed += '0'   # insere bit de stuffing
+                stuffed += '0'   #Prevenir erros!!!!!
                 contagem_uns = 0
         else:
             contagem_uns = 0
@@ -182,27 +120,15 @@ def transmissor_insercao_bits(bits: str) -> str:
     return _FLAG_BITS + stuffed + _FLAG_BITS
 
 
-def receptor_insercao_bits(bits: str) -> str:
-    """
-    Desenquadra uma string de bits com inserção de bits.
-    Remove as FLAGS delimitadoras e descarta os bits '0' inseridos
-    após cinco '1' consecutivos.
-
-    Parâmetros:
-    - bits: string de bits enquadrada
-
-    Retorno:
-    - string de bits de dado, ou -1 em caso de erro
-    """
+def receptor_insercao_bits(bits: str) -> str:    
     flag = _FLAG_BITS
 
-    # Localiza início e fim (primeira e última FLAG)
     inicio = bits.find(flag)
-    if inicio == -1:
-        return -1
+    if inicio == '-1':
+        return '-1'
     fim = bits.rfind(flag)
     if fim == inicio:
-        return -1
+        return '-1'
 
     dados_stuffed = bits[inicio + len(flag):fim]
 
@@ -216,7 +142,7 @@ def receptor_insercao_bits(bits: str) -> str:
             contagem_uns += 1
             destuffed += bit
             if contagem_uns == 5:
-                i += 1          # descarta o próximo '0' de stuffing
+                i += 1        
                 contagem_uns = 0
         else:
             contagem_uns = 0

@@ -1,32 +1,13 @@
-"""
-Funções auxiliares de conversão entre texto e bits.
-"""
-
-
 def texto_para_bits(texto: str) -> str:
-    """
-    Converte uma string de texto em uma string de bits (codificação ASCII/UTF-8).
+    #Converte uma string de texto em uma string de bits (codificação ASCII/UTF-8).
 
-    Parâmetros:
-    - texto: string de caracteres
-
-    Retorno:
-    - string de bits (8 bits por caractere)
-    """
     return ''.join(format(ord(c), '08b') for c in texto)
 
 
 def bits_para_texto(bits: str) -> str:
-    """
-    Converte uma string de bits em texto (decodificação ASCII).
-    Ignora bytes incompletos ao final.
+    #Converte uma string de bits em texto (decodificação ASCII).
+    #Ignora bytes incompletos ao final.
 
-    Parâmetros:
-    - bits: string de bits
-
-    Retorno:
-    - string de caracteres
-    """
     texto = ''
     for i in range(0, len(bits) - len(bits) % 8, 8):
         byte = bits[i:i+8]
@@ -34,4 +15,5 @@ def bits_para_texto(bits: str) -> str:
             texto += chr(int(byte, 2))
         except ValueError:
             pass
+
     return texto

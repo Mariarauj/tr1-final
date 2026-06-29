@@ -1,27 +1,24 @@
-"""
-Interface Gráfica do Transmissor (GTK3 + Matplotlib embutido).
+'''
 Permite ao usuário configurar e executar toda a cadeia de transmissão,
 visualizando os sinais digitais e de portadora em tempo real.
-"""
+
+'''
+
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, Pango # type: ignore
 
+import matplotlib
 import numpy as np
-import matplotlib
-import matplotlib
-matplotlib.rcParams['text.usetex'] = False
-matplotlib.rcParams['font.size'] = 9
-matplotlib.rcParams['figure.dpi'] = 80  
-import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from cliente.transmitter import Transmitter
 from matplotlib.backends.backend_gtk3agg import FigureCanvasGTK3Agg as FigureCanvas
 
-from cliente.transmitter import Transmitter
-
+matplotlib.rcParams['text.usetex'] = False
+matplotlib.rcParams['font.size'] = 9
+matplotlib.rcParams['figure.dpi'] = 80 
 
 class ClienteUI(Gtk.Window):
-    """Janela principal do transmissor."""
-
     def __init__(self):
         super().__init__(title='Simulador TR1 — Transmissor')
         self.set_border_width(12)
@@ -31,9 +28,7 @@ class ClienteUI(Gtk.Window):
         self.nome_usuario = 'Usuário'
         self._pedir_nome()
 
-        # ------------------------------------------------------------------
         # HeaderBar
-        # ------------------------------------------------------------------
         header = Gtk.HeaderBar()
         header.set_show_close_button(True)
 
@@ -42,6 +37,7 @@ class ClienteUI(Gtk.Window):
             '<span font="16" weight="bold" foreground="#2c3e50">'
             'Transmissor de Dados</span>'
         )
+
         titulo.set_xalign(0.0)
         header.pack_start(titulo)
 
@@ -50,18 +46,15 @@ class ClienteUI(Gtk.Window):
             '<span font="10" foreground="#7f8c8d">'
             'Teleinformática e Redes 1</span>'
         )
+
         header.pack_end(subtitulo)
         self.set_titlebar(header)
 
-        # ------------------------------------------------------------------
         # Layout raiz
-        # ------------------------------------------------------------------
         raiz = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.add(raiz)
 
-        # ------------------------------------------------------------------
         # Entrada de texto
-        # ------------------------------------------------------------------
         frame_entrada = Gtk.Frame(label=' Mensagem ')
         raiz.pack_start(frame_entrada, False, False, 0)
         self.entrada = Gtk.Entry()
@@ -72,9 +65,7 @@ class ClienteUI(Gtk.Window):
         self.entrada.set_margin_end(6)
         frame_entrada.add(self.entrada)
 
-        # ------------------------------------------------------------------
         # Configurações dos protocolos (4 combos)
-        # ------------------------------------------------------------------
         frame_cfg = Gtk.Frame(label=' Configuração dos Protocolos ')
         raiz.pack_start(frame_cfg, False, False, 0)
         grade = Gtk.Grid(column_spacing=12, row_spacing=6)
@@ -97,12 +88,16 @@ class ClienteUI(Gtk.Window):
         # Linha 1 — combos
         self.combo_mod_digital = self._combo(
             ['NRZ-Polar', 'Manchester', 'Bipolar'])
+        
         self.combo_mod_portadora = self._combo(
             ['ASK', 'FSK', 'QPSK', '16-QAM'])
+        
         self.combo_enquadramento = self._combo(
             ['Contagem de Caracteres', 'Inserção de Bytes', 'Inserção de Bits'])
+        
         self.combo_deteccao = self._combo(
             ['Paridade Par', 'Checksum', 'CRC'])
+        
         self.combo_deteccao.set_active(2)   # CRC como padrão
 
         for col, combo in enumerate([
@@ -114,16 +109,12 @@ class ClienteUI(Gtk.Window):
             combo.set_hexpand(True)
             grade.attach(combo, col, 1, 1, 1)
 
-        # ------------------------------------------------------------------
         # Botão Transmitir
-        # ------------------------------------------------------------------
         self.btn_transmitir = Gtk.Button(label='▶  Transmitir')
         self.btn_transmitir.connect('clicked', self._ao_transmitir)
         raiz.pack_start(self.btn_transmitir, False, False, 0)
 
-        # ------------------------------------------------------------------
         # Saída de texto (etapas do pipeline)
-        # ------------------------------------------------------------------
         frame_saida = Gtk.Frame(label=' Pipeline de Codificação ')
         raiz.pack_start(frame_saida, False, False, 0)
 
@@ -140,9 +131,7 @@ class ClienteUI(Gtk.Window):
         self.label_saida.modify_font(mono)
         scroll_saida.add(self.label_saida)
 
-        # ------------------------------------------------------------------
-        # Área dos gráficos
-        # ------------------------------------------------------------------
+        # Área dos gráficos ----------------------------------------------------
         frame_graficos = Gtk.Frame(label=' Sinais ')
         raiz.pack_start(frame_graficos, True, True, 0)
 
@@ -181,14 +170,13 @@ class ClienteUI(Gtk.Window):
 
         self.canvas1 = None
         self.canvas2 = None
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
+
 
     def _combo(self, opcoes: list[str]) -> Gtk.ComboBoxText:
         cb = Gtk.ComboBoxText()
         for op in opcoes:
             cb.append(op, op)
+
         cb.set_active(0)
         return cb
 
@@ -202,8 +190,10 @@ class ClienteUI(Gtk.Window):
         entrada = Gtk.Entry()
         area.add(entrada)
         dlg.show_all()
+
         if dlg.run() == Gtk.ResponseType.OK:
             self.nome_usuario = entrada.get_text().strip() or 'Usuário'
+
         dlg.destroy()
 
     def _aviso(self, msg: str):
@@ -216,12 +206,9 @@ class ClienteUI(Gtk.Window):
         dlg.run()
         dlg.destroy()
 
-    # ------------------------------------------------------------------
-    # Transmissão
-    # ------------------------------------------------------------------
-
     def _ao_transmitir(self, _widget):
         texto = self.entrada.get_text().strip()
+
         if not texto:
             self._aviso('Por favor, insira um texto para transmitir.')
             return
@@ -234,6 +221,7 @@ class ClienteUI(Gtk.Window):
 
         try:
             resultado = self.transmitter.processar(texto)
+
         except Exception as exc:
             self._aviso(f'Erro ao processar mensagem:\n{exc}')
             return
@@ -250,6 +238,7 @@ class ClienteUI(Gtk.Window):
             f"Enquadrado    : {resumo(resultado['bits_enquadrado'])}\n"
             f"Com Ruído     : {resumo(resultado['bits_ruidosos'])}\n"
         )
+
         self.label_saida.set_text(saida)
 
         # Atualiza gráficos
@@ -258,12 +247,11 @@ class ClienteUI(Gtk.Window):
         # Tenta enviar ao servidor
         try:
             self.transmitter.enviar(resultado, self.nome_usuario)
+
         except ConnectionRefusedError as exc:
             self._aviso(str(exc))
 
     def _atualizar_graficos(self, resultado: dict):
-        from matplotlib.figure import Figure
-
         mod_digital   = self.transmitter.mod_digital
         mod_portadora = self.transmitter.mod_portadora
 
@@ -289,8 +277,10 @@ class ClienteUI(Gtk.Window):
         ax1.set_yticks([])
         ax1.tick_params(labelbottom=False, labelleft=False,
                         labeltop=False, labelright=False)
+        
         ax1.step(range(len(sinal_d)), sinal_d, where='post',
                 color='steelblue', linewidth=1.0)
+        
         ax1.grid(True, alpha=0.3)
 
         self.canvas1 = FigureCanvas(fig1)
@@ -302,6 +292,7 @@ class ClienteUI(Gtk.Window):
             self.scroll_graf2.remove(filho)
 
         tempo, sinal_p = resultado['sinal_portadora']
+
         if len(sinal_p) > MAX_PTS:
             idx = np.linspace(0, len(sinal_p) - 1, MAX_PTS, dtype=int)
             tempo   = tempo[idx]
@@ -314,6 +305,7 @@ class ClienteUI(Gtk.Window):
         ax2.set_yticks([])
         ax2.tick_params(labelbottom=False, labelleft=False,
                         labeltop=False, labelright=False)
+        
         ax2.plot(tempo, sinal_p, color='darkorange', linewidth=0.8)
         ax2.grid(True, alpha=0.3)
 

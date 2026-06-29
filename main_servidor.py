@@ -1,11 +1,8 @@
-"""
-Ponto de entrada do Receptor/Servidor.
-Execute com:
-    python main_servidor.py
-"""
+#python main_servidor.py
+
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk
+from gi.repository import Gtk # type: ignore
 
 from servidor.ui_servidor import ServidorUI
 

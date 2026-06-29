@@ -1,9 +1,8 @@
-"""
-Transmissor - Lado TX do pipeline de simulação.
-Encapsula toda a cadeia de processamento:
-  texto → bits → Hamming → detecção de erros → enquadramento
-  → modulação digital → modulação por portadora → ruído gaussiano → envio TCP
-"""
+'''
+Encapsula toda a cadeia de processamento: texto - bits - Hamming - detecção de erros
+- enquadramento - modulação digital - modulação por portadora - ruído gaussiano - envio TCP
+
+'''
 import json
 import socket
 import struct
@@ -33,8 +32,7 @@ PORT = 5000
 
 
 class Transmitter:
-    """Gerencia o pipeline completo de transmissão."""
-
+    #Gerencia o pipeline de transmissão.
     def __init__(
         self,
         mod_digital: str = 'NRZ-Polar',
@@ -49,73 +47,70 @@ class Transmitter:
         self.deteccao      = deteccao
         self.sigma_ruido   = sigma_ruido
 
-    # ------------------------------------------------------------------
     # Pipeline de codificação (TX)
-    # ------------------------------------------------------------------
-
     def codificar_texto(self, texto: str) -> str:
-        """Texto → string de bits."""
+        # Converte mesnagem para bits
         return texto_para_bits(texto)
 
     def aplicar_hamming(self, bits: str) -> str:
-        """Adiciona bits de paridade Hamming."""
+        # codifica para Hamming.
         return transmissor_hamming(bits)
 
     def aplicar_deteccao(self, bits: str) -> str:
-        """Adiciona bits de detecção de erros."""
+        # seleciona a detecção de erros
         if self.deteccao == 'Paridade Par':
             return transmissor_paridade(bits)
+        
         elif self.deteccao == 'Checksum':
             return transmissor_checksum(bits)
-        else:                                   # CRC-32 (padrão)
+        
+        else:                                
             return transmissor_crc(bits)
 
-    def aplicar_enquadramento(self, bits: str) -> str:
-        """Enquadra os bits. Contagem e Inserção de Bytes exigem múltiplo de 8."""
-        # Padding para múltiplo de 8 (necessário para enquadramento por bytes)
+    def aplicar_enquadramento(self, bits: str) -> str: # Seleciona o enquadramento.
+
+        # Padding para múltiplo de 8 (necessário para Contagem e Inserção de Bytes)
         resto = len(bits) % 8
         if resto != 0:
             bits = bits + '0' * (8 - resto)
 
         if self.enquadramento == 'Contagem de Caracteres':
             return transmissor_contagem(bits)
+        
         elif self.enquadramento == 'Inserção de Bytes':
             return transmissor_insercao_bytes(bits)
+        
         else:                                   # Inserção de Bits
             return transmissor_insercao_bits(bits)
 
     def modular_digital(self, bits: list[int]) -> np.ndarray:
-        """Modulação digital (banda-base)."""
+        # Seleciona a modulação digital (banda-base).
         if self.mod_digital == 'Manchester':
             return manchester(bits)
+        
         elif self.mod_digital == 'Bipolar':
             return bipolar(bits)
-        else:                                   # NRZ-Polar (padrão)
+        
+        else:                                   
             return nrz_polar(bits)
 
     def modular_portadora(self, bits: list[int]) -> tuple:
-        """Modulação por portadora."""
+        # Seleciona modulação por portadora.
         if self.mod_portadora == 'FSK':
             return fsk(bits)
+        
         elif self.mod_portadora == 'QPSK':
             return qpsk(bits)
+        
         elif self.mod_portadora == '16-QAM':
             return qam16(bits)
-        else:                                   # ASK (padrão)
+        
+        else:                                   
             return ask(bits)
 
-    # ------------------------------------------------------------------
+
     # Pipeline completo
-    # ------------------------------------------------------------------
-
-    def processar(self, texto: str) -> dict:
-        """
-        Executa a cadeia completa TX e retorna dicionário com
-        todas as etapas intermediárias e os sinais produzidos.
-
-        O ruído gaussiano n(0, σ) é aplicado sobre os sinais analógicos
-        (após modulação), conforme diagrama do enunciado.
-        """
+    def processar(self, texto: str) -> dict: 
         bits_brutos     = self.codificar_texto(texto)
         bits_hamming    = self.aplicar_hamming(bits_brutos)
         bits_deteccao   = self.aplicar_deteccao(bits_hamming)
@@ -127,7 +122,7 @@ class Transmitter:
         sinal_digital        = self.modular_digital(lista_bits)
         tempo, sinal_portadora = self.modular_portadora(lista_bits)
 
-        # Ruído gaussiano n(0, σ) sobre os sinais analógicos — meio de comunicação
+        # Ruído gaussiano n(0, σ) sobre os sinais analógicos
         sinal_digital_ruidoso   = adicionar_ruido_gaussiano(sinal_digital,   self.sigma_ruido)
         sinal_portadora_ruidosa = adicionar_ruido_gaussiano(sinal_portadora, self.sigma_ruido)
 
@@ -137,21 +132,14 @@ class Transmitter:
             'bits_hamming'   : bits_hamming,
             'bits_deteccao'  : bits_deteccao,
             'bits_enquadrado': bits_enquadrado,
-            'bits_ruidosos'  : bits_enquadrado,          # mantido para exibição na UI
+            'bits_ruidosos'  : bits_enquadrado,          
             'sinal_digital'  : sinal_digital_ruidoso,
             'sinal_portadora': (tempo, sinal_portadora_ruidosa),
         }
 
-    # ------------------------------------------------------------------
+    
     # Envio via TCP
-    # ------------------------------------------------------------------
-
     def enviar(self, resultado: dict, nome: str):
-        """
-        Serializa e envia os dados ao servidor receptor via TCP.
-        O sinal de portadora (com ruído) é enviado junto com os metadados
-        necessários para que o receptor possa demodular e decodificar.
-        """
         t, sinal = resultado['sinal_portadora']
 
         payload = {

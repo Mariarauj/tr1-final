@@ -1,27 +1,4 @@
-"""
-Camada de Enlace - Correção de Erros (Código de Hamming)
-Implementa codificação e decodificação com correção de 1 bit de erro.
-"""
-
-
-def _posicoes_paridade(n_total: int) -> list[int]:
-    #registra os locais dos bits de paridade 
-    pos = []
-    p = 1
-    while p <= n_total:
-        pos.append(p)
-        p <<= 1
-    return pos
-
-
 def transmissor_hamming(bits: str) -> str:
-    '''
-    Codifica a palavra a ser enviada 
-
-    Parâmetros: palavra (string de bits)
-
-    Retorno: palavra codificada com os bits de paridade
-    '''
     n_dados = len(bits)
 
     # Calcula número de bits de paridade necessários: 2^r >= n + r + 1
@@ -52,15 +29,8 @@ def transmissor_hamming(bits: str) -> str:
 
 
 def receptor_hamming(bits: str) -> tuple[str, int]:
-    '''
-    Decodifica e corrige (se necessário) uma mensagem com código de Hamming.
+    #Decodifica e corrige (se necessário) uma mensagem com código de Hamming.
 
-    Parâmetro: palavra codificada
-
-    Retorno:
-        - dados_corrigidos: string de bits de dado sem os bits de paridade
-        - pos_erro: posição do bit com erro (1-indexada) ou 0 se não há erro
-    '''
     n_total = len(bits)
     codificado = [int(b) for b in bits]
 

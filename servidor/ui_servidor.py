@@ -1,18 +1,17 @@
-"""
-Interface Gráfica do Receptor (GTK3).
-Exibe um terminal de log com todas as etapas do pipeline RX,
-incluindo demodulação, desenquadramento, detecção e correção de erros.
-"""
+'''
+Exibe um terminal de log com todas as etapas do pipeline RX
+(demodulação, desenquadramento, detecção e correção de erro)
+
+'''
+
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, Pango, GLib
+from gi.repository import Gtk, Gdk, Pango, GLib # type: ignore
 
 from servidor.receiver import Receiver
 
 
 class ServidorUI(Gtk.Window):
-    """Janela principal do receptor/servidor."""
-
     def __init__(self):
         super().__init__(title='Simulador TR1 — Receptor')
         self.set_border_width(10)
