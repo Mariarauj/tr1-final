@@ -261,7 +261,7 @@ class ClienteUI(Gtk.Window):
 
         MAX_PTS = 1000
 
-        # --- Gráfico 1: sinal digital ---
+        # Gráfico 1: sinal digital
         for filho in self.scroll_graf1.get_children():
             self.scroll_graf1.remove(filho)
 
@@ -287,7 +287,7 @@ class ClienteUI(Gtk.Window):
         self.canvas1.set_size_request(900, 200)
         self.scroll_graf1.add(self.canvas1)
 
-        # --- Gráfico 2: sinal de portadora ---
+        # Gráfico 2: sinal de portadora
         for filho in self.scroll_graf2.get_children():
             self.scroll_graf2.remove(filho)
 
