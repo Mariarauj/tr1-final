@@ -73,6 +73,13 @@ tr1-final/
 
 ## Como Executar
 
+### Ambiente Virtual
+```bash
+python3 -m venv venv                                  # cria o ambiente virtual
+source /home/mariaraujo/tr1-final/venv/bin/activate   # caminho específico do projeto
+pip install --no-cache-dir -r requirements.txt        # instala as dependências
+```
+
 ### Pré-requisitos
 - Python 3.10+
 - GTK3 (`sudo apt install python3-gi gir1.2-gtk-3.0` no Ubuntu/Debian)

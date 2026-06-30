@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# script.sh — Configuração e execução do Simulador TR1
+# script.sh — Execução do Simulador TR1
 # ============================================================
 # Uso:
 #   bash script.sh servidor   → inicia o receptor
@@ -9,20 +9,6 @@
 # ============================================================
 
 set -e
-
-VENV_DIR=".venv"
-
-echo "Verificando ambiente virtual…"
-if [ ! -d "$VENV_DIR" ]; then
-    echo "    Criando venv em $VENV_DIR"
-    python3 -m venv "$VENV_DIR"
-fi
-
-source "$VENV_DIR/bin/activate"
-
-echo "Instalando dependências…"
-pip install --quiet --upgrade pip
-pip install --quiet -r requirements.txt
 
 echo ""
 echo "Iniciando modo: ${1:-ambos}"
