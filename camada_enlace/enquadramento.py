@@ -10,7 +10,7 @@ Implementa os três tipos de enquadramento exigidos:
 # 1. Contagem de caracteres
 def transmissor_contagem(bits: str, tamanho_quadro: int = 6) -> str:
     if len(bits) % 8 != 0:
-        return '-1'
+        return -1
 
     lista_bytes = [bits[i:i+8] for i in range(0, len(bits), 8)]
     total = len(lista_bytes)
@@ -28,7 +28,7 @@ def transmissor_contagem(bits: str, tamanho_quadro: int = 6) -> str:
 
 def receptor_contagem(bits: str) -> str:
     if len(bits) % 8 != 0:
-        return '-1'
+        return -1
 
     conteudo = ''
     num_bytes = len(bits) // 8
@@ -39,7 +39,7 @@ def receptor_contagem(bits: str) -> str:
         n = int(cabecalho, 2)
         idx += 1
         if idx + n > num_bytes:
-            return '-1'
+            return -1
         for _ in range(n):
             conteudo += bits[idx*8:(idx+1)*8]
             idx += 1
@@ -54,7 +54,7 @@ _ESC_IB   = '00011011'   # ESC (0x1B)
 
 def transmissor_insercao_bytes(bits: str, tamanho_quadro: int = 6) -> str:
     if len(bits) % 8 != 0:
-        return '-1'
+        return -1
 
     lista_bytes = [bits[i:i+8] for i in range(0, len(bits), 8)]
     quadros = ''
@@ -76,7 +76,7 @@ def transmissor_insercao_bytes(bits: str, tamanho_quadro: int = 6) -> str:
 
 def receptor_insercao_bytes(bits: str) -> str:
     if len(bits) % 8 != 0:
-        return '-1'
+        return -1
 
     conteudo = ''
     num_bytes = len(bits) // 8
@@ -91,7 +91,7 @@ def receptor_insercao_bytes(bits: str) -> str:
                 conteudo += prox
                 idx += 2
             else:
-                return '-1'
+                return -1
         elif byte == _FLAG_IB:
             idx += 1
         else:
@@ -124,11 +124,11 @@ def receptor_insercao_bits(bits: str) -> str:
     flag = _FLAG_BITS
 
     inicio = bits.find(flag)
-    if inicio == '-1':
-        return '-1'
+    if inicio == -1:
+        return -1
     fim = bits.rfind(flag)
     if fim == inicio:
-        return '-1'
+        return -1
 
     dados_stuffed = bits[inicio + len(flag):fim]
 
