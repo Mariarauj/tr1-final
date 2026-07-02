@@ -62,10 +62,10 @@ def demod_fsk(tempo: np.ndarray, sinal: np.ndarray) -> list[int]:
         segmento = sinal[i:i + amostras_por_bit]
         if len(segmento) < amostras_por_bit:
             break
-        fft = np.abs(np.fft.fft(segmento))
-        freqs = np.fft.fftfreq(len(segmento), d=dt)
-        mask = freqs > 0
-        freq_dom = freqs[mask][np.argmax(fft[mask])]
+        fft = np.abs(np.fft.fft(segmento)) #Fast Fourier Transform
+        freqs = np.fft.fftfreq(len(segmento), d=dt) #qual frequencia corresponde a cada amplitude da FFT
+        mask = freqs > 0 #ignora frequencias negativas
+        freq_dom = freqs[mask][np.argmax(fft[mask])] #armax = posição da maior amplitude e freq_dom = retorna sua frequencia correspondente
         bits.append(1 if abs(freq_dom - f1) < abs(freq_dom - f0) else 0)
     return bits
 
@@ -77,7 +77,7 @@ def demod_qpsk(tempo: np.ndarray, sinal: np.ndarray) -> list[int]:
     amostras_por_simbolo = int(duracao_simbolo * fs)
     bits = []
 
-    _inv = {v: k for k, v in _CONSTELACAO_QPSK.items()}
+    #_inv = {v: k for k, v in _CONSTELACAO_QPSK.items()}
 
     for i in range(0, len(sinal) - amostras_por_simbolo + 1, amostras_por_simbolo):
         seg = sinal[i:i + amostras_por_simbolo]
