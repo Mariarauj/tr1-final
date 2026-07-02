@@ -1,0 +1,13 @@
+o ruído está errado - recisa ser capaz de ligar e desligar na interface gráfica do cliente(alterna bit é ttaltmente desnecessário)
+remove a solicitação de nome
+inserir os componentes dos gráficos
+verificar oq porras acontece com o padding quando as strings não tem a quantd de bits necessária. (é possivel enviar paddding como um 
+estudar o retorno dos bits amostrados nos terminais
+adicionar mais comentários 
+
+perguntas:
+pediu para eu localizar os quadros na interface gráfica do cliente (onde ficam os gráficos)
+- olhar a string e achar o quadro.
+
+pediu para eu explicar em que xrk foram enfiados os padddings
+pediu pra eu explicar a função de qam16 (eu não soube dizer que porras era fs nem oq era t)
