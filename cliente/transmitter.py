@@ -30,6 +30,8 @@ from camada_fisica.ruido import adicionar_ruido_gaussiano, inverter_bit_aleatori
 HOST = '127.0.0.1'
 PORT = 5000
 
+TAMANHO_QUADRO_PADRAO = 6  # usado quando o usuário não informar nenhum valor
+
 
 class Transmitter:
     #Gerencia o pipeline de transmissão.
@@ -40,12 +42,14 @@ class Transmitter:
         enquadramento: str = 'Contagem de Caracteres',
         deteccao: str = 'CRC',
         sigma_ruido: float = 0.05,
+        tamanho_maximo_quadro: int | None = None,
     ):
         self.mod_digital   = mod_digital
         self.mod_portadora = mod_portadora
         self.enquadramento = enquadramento
         self.deteccao      = deteccao
         self.sigma_ruido   = sigma_ruido
+        self.tamanho_maximo_quadro = tamanho_maximo_quadro
 
     # Pipeline de codificação (TX)
     def codificar_texto(self, texto: str) -> str:
@@ -73,12 +77,15 @@ class Transmitter:
         cabecalho_pad = format(pad_len, '08b')
         bits = cabecalho_pad + bits + '0' * pad_len
 
+        # Usa o valor informado pelo usuário; se não houver, cai no padrão
+        tamanho_quadro = self.tamanho_maximo_quadro or TAMANHO_QUADRO_PADRAO
+
         if self.enquadramento == 'Contagem de Caracteres':
-            return transmissor_contagem(bits)
-        
+            return transmissor_contagem(bits, tamanho_quadro)
+
         elif self.enquadramento == 'Inserção de Bytes':
-            return transmissor_insercao_bytes(bits)
-        
+            return transmissor_insercao_bytes(bits, tamanho_quadro)
+
         else:                                   # Inserção de Bits
             return transmissor_insercao_bits(bits)
 

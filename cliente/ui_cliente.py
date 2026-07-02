@@ -196,6 +196,37 @@ class ClienteUI(Gtk.Window):
 
         dlg.destroy()
 
+    def _pedir_tamanho_quadro(self) -> int | None:
+        """Pergunta ao usuário o tamanho máximo do quadro (em bytes),
+        exibido antes de aplicar o enquadramento por Contagem de
+        Caracteres ou Inserção de Bytes. Retorna None se o usuário
+        cancelar a operação."""
+        dlg = Gtk.Dialog(title='Tamanho do Quadro', transient_for=self, flags=0)
+        dlg.add_buttons(
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_OK, Gtk.ResponseType.OK,
+        )
+        dlg.set_default_size(320, 120)
+
+        area = dlg.get_content_area()
+        area.set_spacing(6)
+        area.add(Gtk.Label(label='Tamanho máximo do quadro (em bytes):'))
+
+        ajuste = Gtk.Adjustment(
+            value=6, lower=1, upper=1024, step_increment=1, page_increment=8
+        )
+        spin = Gtk.SpinButton()
+        spin.set_adjustment(ajuste)
+        spin.set_numeric(True)
+        area.add(spin)
+        dlg.show_all()
+
+        resposta = dlg.run()
+        tamanho = spin.get_value_as_int() if resposta == Gtk.ResponseType.OK else None
+        dlg.destroy()
+
+        return tamanho
+
     def _aviso(self, msg: str):
         dlg = Gtk.MessageDialog(
             parent=self,
@@ -218,6 +249,17 @@ class ClienteUI(Gtk.Window):
         self.transmitter.mod_portadora = self.combo_mod_portadora.get_active_text()
         self.transmitter.enquadramento = self.combo_enquadramento.get_active_text()
         self.transmitter.deteccao      = self.combo_deteccao.get_active_text()
+
+        # Pergunta o tamanho máximo do quadro quando o enquadramento exigir
+        if self.transmitter.enquadramento in (
+            'Contagem de Caracteres', 'Inserção de Bytes'
+        ):
+            tamanho = self._pedir_tamanho_quadro()
+            if tamanho is None:
+                return  # usuário cancelou a transmissão
+            self.transmitter.tamanho_maximo_quadro = tamanho
+        else:
+            self.transmitter.tamanho_maximo_quadro = None
 
         try:
             resultado = self.transmitter.processar(texto)
