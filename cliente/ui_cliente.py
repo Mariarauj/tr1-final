@@ -4,12 +4,12 @@ visualizando os sinais digitais e de portadora em tempo real.
 
 '''
 
-import gi
+import gi #cria inteface gráfica
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, Pango # type: ignore
 
-import matplotlib
-import numpy as np
+import matplotlib #equações matematicas
+import numpy as np #analise de dados
 from matplotlib.figure import Figure
 from cliente.transmitter import Transmitter
 from matplotlib.backends.backend_gtk3agg import FigureCanvasGTK3Agg as FigureCanvas

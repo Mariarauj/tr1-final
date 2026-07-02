@@ -9,7 +9,7 @@ import numpy as np
 def nrz_polar(dados: list[int]) -> np.ndarray:
     #Coleta 100 amostras por bit.
     
-    V = 1
+    V = 1 #amplitude do sinal
     amostras_por_bit = 100
     sinal = np.array([-V if bit == 0 else V for bit in dados])
     return np.repeat(sinal, amostras_por_bit).astype(float)
@@ -84,9 +84,9 @@ def qpsk(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
         bits_str += '0'
 
     simbolos = [bits_str[i:i+2] for i in range(0, len(bits_str), 2)]
-    fs = 1000
+    fs = 1000 
     f_portadora = 10
-    duracao_simbolo = 0.1   # segundos
+    duracao_simbolo = 0.1   # cada 0,1 segundo transmite 2 bits
     t = np.arange(0, len(simbolos) * duracao_simbolo, 1 / fs)
     sinal = np.zeros_like(t)
 
