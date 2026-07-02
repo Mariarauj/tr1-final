@@ -25,7 +25,7 @@ from camada_fisica.modulacao import (
     nrz_polar, manchester, bipolar,
     ask, fsk, qpsk, qam16,
 )
-from camada_fisica.ruido import adicionar_ruido_gaussiano
+from camada_fisica.ruido import adicionar_ruido_gaussiano, inverter_bit_aleatorio
 
 HOST = '127.0.0.1'
 PORT = 5000
@@ -70,9 +70,14 @@ class Transmitter:
     def aplicar_enquadramento(self, bits: str) -> str: # Seleciona o enquadramento.
 
         # Padding para múltiplo de 8 (necessário para Contagem e Inserção de Bytes)
+        # Guardamos a quantidade de padding em um cabeçalho de 8 bits no início,
+        # para que o receptor saiba exatamente quantos bits de enchimento remover
+        # ANTES de rodar a detecção de erros / Hamming. Sem isso, o padding entra
+        # no bloco protegido pelo CRC/Checksum e desalinha tudo (bug corrigido).
         resto = len(bits) % 8
-        if resto != 0:
-            bits = bits + '0' * (8 - resto)
+        pad_len = (8 - resto) % 8
+        cabecalho_pad = format(pad_len, '08b')
+        bits = cabecalho_pad + bits + '0' * pad_len
 
         if self.enquadramento == 'Contagem de Caracteres':
             return transmissor_contagem(bits)
@@ -114,7 +119,15 @@ class Transmitter:
         bits_brutos     = self.codificar_texto(texto)
         bits_hamming    = self.aplicar_hamming(bits_brutos)
         bits_deteccao   = self.aplicar_deteccao(bits_hamming)
-        bits_enquadrado = self.aplicar_enquadramento(bits_deteccao)
+        # Ruído de canal digital: inverte um bit aleatório com probabilidade
+        # TAXA_ERRO (definida em camada_fisica/ruido.py). Aplicado ANTES do
+        # enquadramento para atingir só os dados protegidos por Hamming/CRC/
+        # Checksum — nunca as flags ou o cabeçalho de padding do quadro,
+        # que precisam chegar intactos para o desenquadramento funcionar.
+        bits_deteccao_ruidosos = inverter_bit_aleatorio(bits_deteccao)
+
+        bits_enquadrado = self.aplicar_enquadramento(bits_deteccao_ruidosos)
+        bits_ruidosos = bits_enquadrado
 
         lista_bits = [int(b) for b in bits_enquadrado]
 
@@ -132,7 +145,7 @@ class Transmitter:
             'bits_hamming'   : bits_hamming,
             'bits_deteccao'  : bits_deteccao,
             'bits_enquadrado': bits_enquadrado,
-            'bits_ruidosos'  : bits_enquadrado,          
+            'bits_ruidosos'  : bits_ruidosos,
             'sinal_digital'  : sinal_digital_ruidoso,
             'sinal_portadora': (tempo, sinal_portadora_ruidosa),
         }

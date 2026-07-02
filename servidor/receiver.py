@@ -133,11 +133,22 @@ class Receiver:
         else:                                       
             bits_desenq = receptor_insercao_bits(bits)
 
-        if bits_desenq == -1:
+        if bits_desenq == '-1':
             self._log('[AVISO] Erro no desenquadramento — quadro inválido.\n')
             return
         
         self._log(f'Após desenquadramento : {self._resumo(bits_desenq)}\n')
+
+        # Remove o cabeçalho de padding (8 bits) adicionado pelo transmissor
+        # e o próprio padding no final, para reverter exatamente o enquadramento
+        # antes de checar CRC/Checksum/Paridade e o Hamming.
+        if len(bits_desenq) < 8:
+            self._log('[AVISO] Quadro muito curto — cabeçalho de padding ausente.\n')
+            return
+        pad_len = int(bits_desenq[:8], 2)
+        bits_desenq = bits_desenq[8:]
+        if pad_len > 0:
+            bits_desenq = bits_desenq[:-pad_len]
 
         #Detecção de erros
         if deteccao == 'Paridade Par':
