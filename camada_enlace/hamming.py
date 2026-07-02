@@ -39,7 +39,7 @@ def receptor_hamming(bits: str) -> tuple[str, int]:
     while (1 << r) < n_total:
         r += 1
 
-    # Síndrome: recalcula cada bit de paridade
+    # recalcula cada bit de paridade
     pos_erro = 0
     for k in range(r):
         pos_par = 1 << k
