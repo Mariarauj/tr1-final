@@ -113,11 +113,7 @@ class Transmitter:
         bits_brutos     = self.codificar_texto(texto)
         bits_hamming    = self.aplicar_hamming(bits_brutos)
         bits_deteccao   = self.aplicar_deteccao(bits_hamming)
-        # Ruído de canal digital: inverte um bit aleatório com probabilidade
-        # TAXA_ERRO (definida em camada_fisica/ruido.py). Aplicado ANTES do
-        # enquadramento para atingir só os dados protegidos por Hamming/CRC/
-        # Checksum — nunca as flags ou o cabeçalho de padding do quadro,
-        # que precisam chegar intactos para o desenquadramento funcionar.
+        
         bits_deteccao_ruidosos = inverter_bit_aleatorio(bits_deteccao)
 
         bits_enquadrado = self.aplicar_enquadramento(bits_deteccao_ruidosos)
