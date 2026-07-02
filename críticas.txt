@@ -11,3 +11,5 @@ pediu para eu localizar os quadros na interface gráfica do cliente (onde ficam 
 
 pediu para eu explicar em que xrk foram enfiados os padddings
 pediu pra eu explicar a função de qam16 (eu não soube dizer que porras era fs nem oq era t)
+
+obs p/ prova: verificar se a calculadora está calculando radianos.
