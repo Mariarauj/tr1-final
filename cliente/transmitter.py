@@ -68,12 +68,6 @@ class Transmitter:
             return transmissor_crc(bits)
 
     def aplicar_enquadramento(self, bits: str) -> str: # Seleciona o enquadramento.
-
-        # Padding para múltiplo de 8 (necessário para Contagem e Inserção de Bytes)
-        # Guardamos a quantidade de padding em um cabeçalho de 8 bits no início,
-        # para que o receptor saiba exatamente quantos bits de enchimento remover
-        # ANTES de rodar a detecção de erros / Hamming. Sem isso, o padding entra
-        # no bloco protegido pelo CRC/Checksum e desalinha tudo (bug corrigido).
         resto = len(bits) % 8
         pad_len = (8 - resto) % 8
         cabecalho_pad = format(pad_len, '08b')

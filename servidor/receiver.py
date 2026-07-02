@@ -138,10 +138,6 @@ class Receiver:
             return
         
         self._log(f'Após desenquadramento : {self._resumo(bits_desenq)}\n')
-
-        # Remove o cabeçalho de padding (8 bits) adicionado pelo transmissor
-        # e o próprio padding no final, para reverter exatamente o enquadramento
-        # antes de checar CRC/Checksum/Paridade e o Hamming.
         if len(bits_desenq) < 8:
             self._log('[AVISO] Quadro muito curto — cabeçalho de padding ausente.\n')
             return
