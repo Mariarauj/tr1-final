@@ -2,48 +2,66 @@
 Implementa modulações digitais (NRZ-Polar, Manchester, Bipolar)
             modulações por portadora (ASK, FSK, QPSK, 16-QAM).
 
+As funções devem receber um trem de bits (0s e 1s) - 'dados' - e retornar valores numéricos representando o sinal modulado.
+
 '''
-import numpy as np
+import numpy as np #facilita operações matemáticas e consequente manipulação de sinais.
 
-# Modulações Digitais (banda-base)
-def nrz_polar(dados: list[int]) -> np.ndarray:
-    #Coleta 100 amostras por bit.
-    
-    V = 1 #amplitude do sinal
-    amostras_por_bit = 100
-    sinal = np.array([-V if bit == 0 else V for bit in dados])
-    return np.repeat(sinal, amostras_por_bit).astype(float)
+# Modulações Digitais (banda-base) -------------------------------------------------------------
+
+def nrz_polar(dados: list[int]) -> np.ndarray: 
+    '''
+    Os bits 0 serão representados como -V e os bits 1 como +V.
+    '''
+    V = 1 #define a amplitude do sinal
+    amostras_por_bit = 100 #define 100 amostras por bit.
+    sinal = np.array([-V if bit == 0 else V for bit in dados]) #define o sinal -V e V para bit 0 e V para bit 1.
+    return np.repeat(sinal, amostras_por_bit).astype(float) #repete cada elemento do sinal 100x -> [1, -1] = [1, 1, ..., 1, -1, -1, ..., -1]
 
 
-def manchester(dados: list[int]) -> np.ndarray:   
-    V = 1
-    sinal = []
+def manchester(dados: list[int]) -> np.ndarray: 
+    '''
+    Os bits serão definidos como uma transição entre +V e -V ou -V para +V.
+    Cada bit é representado por duas amostras, uma para cada metade do período do bit.
+
+    '''  
+    V = 1 #define a amplitude do sinal
+    amostras_por_transicao = 50 #define 50 amostras por transição (cada bit seguirá com 100 amostras).
+    sinal = [] #lista vazia para armazenar o sinal modulado.
     for bit in dados:
         if bit == 1:
-            sinal.extend([V, -V])
+            sinal.extend([V, -V]) #para bit 1, adiciona V = 1 para a primeira metade do período e -V = -1 para a segunda metade do período.
         else:
-            sinal.extend([-V, V])
-    return np.array(sinal, dtype=float)
+            sinal.extend([-V, V]) #para bit 0, adiciona -V = -1 para a primeira metade do período e V = 1 para a segunda metade do período.
+    return np.repeat(np.array(sinal, dtype=float), amostras_por_transicao)
 
 
 def bipolar(dados: list[int]) -> np.ndarray:
-    V = 1
-    estado = 1
+    '''
+    Os bits 0 serão definidos por V = 0 e os bits 1 como uma alternância entre +V e -V.
+    '''
+    V = 1 #define a amplitude do sinal
+    amostras_por_bit = 100 #define 100 amostras por bit.
+    estado = 1 #define a polaridade do próximo bit 1.
     sinal = []
     for bit in dados:
         if bit == 0:
-            sinal.append(0)
+            sinal.append(0) #para bit 0 o sinal será 0
         else:
-            sinal.append(estado * V)
-            estado *= -1
-    return np.repeat(np.array(sinal, dtype=float), 100)
+            sinal.append(estado * V) #para bit 1, define o sinal como +V se estado = 1 e -V se estado = -1.
+            estado *= -1 #inverte a polaridade do próximo bit 1.
+    return np.repeat(np.array(sinal, dtype=float), amostras_por_bit) 
 
 
 
-# Modulações por Portadora
+# Modulações por Portadora -----------------------------------------------------------------
+
 def ask(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
+    '''
+    Os bits 1 serão definidos pela presença de sinal e os bits 0 pela ausencia dele.
+    '''
     A = 1
-    f = 2          # Hz
+    f = 2     
     amostras_por_bit = 100
     tempo_total = []
     sinal = []
