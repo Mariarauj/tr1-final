@@ -48,12 +48,13 @@ tr1-final/
 | ASK       | bit 1 → senoide, bit 0 → silêncio              |
 | FSK       | bit 1 → f₁=2 Hz, bit 0 → f₀=1 Hz              |
 | QPSK      | 2 bits/símbolo, 4 pontos de constelação        |
-| 16-QAM    | 4 bits/símbolo, 16 pontos de constelação       |
+| 32-QAM    | 5 bits/símbolo, 32 pontos de constelação       |
 
 ### Camada de Enlace — Enquadramento
 | Protocolo             | Descrição                                    |
 |-----------------------|----------------------------------------------|
 | Contagem de Caracteres| Cabeçalho de 1 byte indica tamanho do quadro |
+| Entrelaçamento de bits| Trens de bits 'empilahdos' com um bit de paridade por coluna        |
 | Inserção de Bytes     | FLAG + ESC para delimitação e escape         |
 | Inserção de Bits      | Flag 01111110 + bit stuffing após 5 uns      |
 
@@ -87,8 +88,8 @@ pip install --no-cache-dir -r requirements.txt        # instala as dependências
 ### Opção 1 — Script automático
 ```bash
 bash script.sh ambos      # inicia servidor e depois o cliente
-bash script.sh servidor   # só o servidor
-bash script.sh cliente    # só o cliente
+bash script.sh servidor   # executa apenas o servidor
+bash script.sh cliente    # executa apenas o cliente
 ```
 
 ### Opção 2 — Manual (dois terminais)
@@ -107,9 +108,12 @@ python main_cliente.py
 ## Pipeline de Simulação
 
 ```
-[TX] texto → bits → Hamming → Detecção Erros → Enquadramento → Ruído
-     → Modulação Digital (gráfico) → Modulação Portadora → TCP →
+[TX] texto → bits → Detecção Erros → Hamming → Enquadramento
+     → Modulação Digital (gráfico) e Modulação Portadora → Ruído
 
-[RX] TCP → Demodulação → Desenquadramento → Verificação Detecção
-     → Correção Hamming → bits → texto
+[RX] Demodulação → Desenquadramento → Correção Hamming → Verificação Detecção → bits → texto
+
+OBS: A escolha pela correção ou detecção de erros será definida pelo nível de ruído, os níveis baixo e médio receberão a detecção de erros, e consequente reenvio dos dados, e o nível alto receberá a correção dos erros (hamming).
+
+
 ```
