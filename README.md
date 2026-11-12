@@ -54,7 +54,7 @@ tr1-final/
 | Protocolo             | Descrição                                    |
 |-----------------------|----------------------------------------------|
 | Contagem de Caracteres| Cabeçalho de 1 byte indica tamanho do quadro |
-| Entrelaçamento de bits| Trens de bits 'empilahdos' com um bit de paridade por coluna        |
+| Entrelaçamento de bits| Trens de bits 'empilhados' com um bit de paridade por coluna        |
 | Inserção de Bytes     | FLAG + ESC para delimitação e escape         |
 | Inserção de Bits      | Flag 01111110 + bit stuffing após 5 uns      |
 
