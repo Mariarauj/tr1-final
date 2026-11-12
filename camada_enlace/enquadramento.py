@@ -1,8 +1,9 @@
 '''
-Implementa os três tipos de enquadramento exigidos:
+Implementa os quatro tipos de enquadramento exigidos:
   1. Contagem de caracteres
-  2. Inserção de bytes (flags + ESC byte)
-  3. Inserção de bits  (flag 01111110 + bit stuffing)
+  2. Entrelaçamento de bits
+  3. Inserção de bytes (flags + ESC byte)
+  4. Inserção de bits  (flag 01111110 + bit stuffing)
 
 '''
 
@@ -150,3 +151,42 @@ def receptor_insercao_bits(bits: str) -> str:
         i += 1
 
     return destuffed
+
+
+# Entrelaçamento de bits
+# Cabeçalho: tamanho do quadro em bytes (16 bits) + total de bytes do payload (16 bits).
+# O payload é dividido em quadros de mesmo tamanho (o último é completado com zeros) e
+# transmitido coluna a coluna: 1º bit de todos os quadros, depois o 2º de todos, e assim
+# por diante. Uma rajada de erros no canal fica espalhada por vários quadros.
+def transmissor_entrelacamento(bits: str, tamanho_quadro: int = 6) -> str:
+    total_bytes = len(bits) // 8
+    if len(bits) % 8 != 0 or not 0 < tamanho_quadro <= 0xFFFF or total_bytes > 0xFFFF:
+        return '-1'
+
+    bits_por_quadro = tamanho_quadro * 8
+    quadros = [bits[i:i + bits_por_quadro].ljust(bits_por_quadro, '0')
+               for i in range(0, len(bits), bits_por_quadro)]
+
+    colunas = ''.join(''.join(q[c] for q in quadros) for c in range(bits_por_quadro))
+    return format(tamanho_quadro, '016b') + format(total_bytes, '016b') + colunas
+
+
+def receptor_entrelacamento(bits: str) -> str:
+    if len(bits) < 32:
+        return '-1'
+
+    tamanho_quadro = int(bits[:16], 2)
+    total_bytes = int(bits[16:32], 2)
+    corpo = bits[32:]
+    if tamanho_quadro == 0:
+        return '-1'
+
+    bits_por_quadro = tamanho_quadro * 8
+    n_quadros = -(-total_bytes // tamanho_quadro)   # divisão com arredondamento para cima
+    if len(corpo) != n_quadros * bits_por_quadro:
+        return '-1'
+
+    # O bit da coluna c do quadro q está em corpo[c * n_quadros + q]
+    quadros = [''.join(corpo[c * n_quadros + q] for c in range(bits_por_quadro))
+               for q in range(n_quadros)]
+    return ''.join(quadros)[:total_bytes * 8]

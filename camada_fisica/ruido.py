@@ -1,24 +1,16 @@
 import numpy as np
-import random
 
-# Taxa de erro de bit (probabilidade de um bit ser invertido)
-TAXA_ERRO = 0.3
+# Níveis de ruído do canal: (média μ, desvio padrão σ) em volts.
+# Com 100 amostras por bit o demodulador faz uma média que atenua o ruído, por isso os σ são altos.
+NIVEIS_RUIDO = {
+    'Baixo': (0.0, 0.5),   # sinal visivelmente ruidoso, praticamente sem erros de bit
+    'Médio': (0.0, 2.0),   # começam a aparecer erros de bit
+    'Alto' : (0.0, 5.0),   # muitos erros de bit
+}
 
 
-def adicionar_ruido_gaussiano(sinal: np.ndarray, sigma: float = 0.05) -> np.ndarray:
-    # Adiciona ruído gaussiano ao sinal contínuo.
+def adicionar_ruido_gaussiano(sinal: np.ndarray, media: float = 0.0, sigma: float = 0.05) -> np.ndarray:
+    # Meio de comunicação (AWGN): soma n ~ N(media, sigma) diretamente aos valores elétricos (V) do sinal.
 
-    ruido = np.random.normal(0, sigma, len(sinal)) #gera ruidos com desvio padrão de 0,05
+    ruido = np.random.normal(media, sigma, sinal.shape)
     return sinal + ruido
-
-
-def inverter_bit_aleatorio(bits_str: str) -> str:
-    # Simula erro no canal digital invertendo um bit aleatório
-
-    if not bits_str:
-        return bits_str
-    copia = list(bits_str)
-    if random.random() < TAXA_ERRO: #sorteia um numero entre 0 e 1
-        i = random.randint(0, len(copia) - 1) #pega um valor aleatório da cópia
-        copia[i] = '1' if copia[i] == '0' else '0'
-    return ''.join(copia)

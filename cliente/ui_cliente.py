@@ -12,6 +12,7 @@ import matplotlib #equações matematicas
 import numpy as np #analise de dados
 from matplotlib.figure import Figure
 from cliente.transmitter import Transmitter
+from camada_fisica.ruido import NIVEIS_RUIDO
 from matplotlib.backends.backend_gtk3agg import FigureCanvasGTK3Agg as FigureCanvas
 
 matplotlib.rcParams['text.usetex'] = False
@@ -90,10 +91,11 @@ class ClienteUI(Gtk.Window):
             ['NRZ-Polar', 'Manchester', 'Bipolar'])
         
         self.combo_mod_portadora = self._combo(
-            ['ASK', 'FSK', 'QPSK', '16-QAM'])
+            ['ASK', 'FSK', '8PSK', '32-QAM'])
         
         self.combo_enquadramento = self._combo(
-            ['Contagem de Caracteres', 'Inserção de Bytes', 'Inserção de Bits'])
+            ['Contagem de Caracteres', 'Entrelaçamento de Bits',
+             'Inserção de Bytes', 'Inserção de Bits'])
         
         self.combo_deteccao = self._combo(
             ['Paridade Par', 'Checksum', 'CRC'])
@@ -108,6 +110,19 @@ class ClienteUI(Gtk.Window):
         ]):
             combo.set_hexpand(True)
             grade.attach(combo, col, 1, 1, 1)
+
+        # Linha 2 — rótulo do ruído do canal (AWGN); linha 3 — nível de ruído
+        lbl_ruido = Gtk.Label()
+        lbl_ruido.set_markup('<b>Nível de Ruído (AWGN)</b>')
+        lbl_ruido.set_xalign(0.0)
+        grade.attach(lbl_ruido, 0, 2, 1, 1)
+
+        self.combo_ruido = Gtk.ComboBoxText()
+        for nivel, (_, sigma) in NIVEIS_RUIDO.items():
+            self.combo_ruido.append(nivel, f'{nivel} (σ = {sigma:g} V)')
+        self.combo_ruido.set_active(0)
+        self.combo_ruido.set_hexpand(True)
+        grade.attach(self.combo_ruido, 0, 3, 1, 1)
 
         # Botão Transmitir
         self.btn_transmitir = Gtk.Button(label='▶  Transmitir')
@@ -249,10 +264,12 @@ class ClienteUI(Gtk.Window):
         self.transmitter.mod_portadora = self.combo_mod_portadora.get_active_text()
         self.transmitter.enquadramento = self.combo_enquadramento.get_active_text()
         self.transmitter.deteccao      = self.combo_deteccao.get_active_text()
+        self.transmitter.media_ruido, self.transmitter.sigma_ruido = (
+            NIVEIS_RUIDO[self.combo_ruido.get_active_id()])
 
         # Pergunta o tamanho máximo do quadro quando o enquadramento exigir
         if self.transmitter.enquadramento in (
-            'Contagem de Caracteres', 'Inserção de Bytes'
+            'Contagem de Caracteres', 'Entrelaçamento de Bits', 'Inserção de Bytes'
         ):
             tamanho = self._pedir_tamanho_quadro()
             if tamanho is None:
@@ -268,6 +285,14 @@ class ClienteUI(Gtk.Window):
             self._aviso(f'Erro ao processar mensagem:\n{exc}')
             return
 
+        # Envia o sinal limpo ao meio de comunicação (servidor), que soma o AWGN e responde
+        resposta = None
+        try:
+            resposta = self.transmitter.enviar(resultado, self.nome_usuario)
+
+        except OSError as exc:
+            self._aviso(str(exc))
+
         # Exibe etapas do pipeline
         def resumo(s, max_len=80):
             return s[:max_len] + ('…' if len(s) > max_len else '')
@@ -278,20 +303,27 @@ class ClienteUI(Gtk.Window):
             f"Após Hamming  : {resumo(resultado['bits_hamming'])}\n"
             f"Após Detecção : {resumo(resultado['bits_deteccao'])}\n"
             f"Enquadrado    : {resumo(resultado['bits_enquadrado'])}\n"
-            f"Com Ruído     : {resumo(resultado['bits_ruidosos'])}\n"
         )
+
+        exibir = resultado
+        if resposta is not None:
+            recebido = resposta['texto']
+            if recebido is None:
+                recebido = f"[falha no receptor: {resposta['erro']}]"
+
+            saida += (
+                f"Com Ruído     : {resumo(resposta['bits_ruidosos'])}\n"
+                f"Recebido      : {recebido}\n"
+            )
+
+            # A portadora exibida é a que chegou ao receptor, já com ruído
+            exibir = dict(resultado, sinal_portadora=(
+                np.array(resposta['tempo']), np.array(resposta['sinal_ruidoso'])))
 
         self.label_saida.set_text(saida)
 
         # Atualiza gráficos
-        self._atualizar_graficos(resultado)
-
-        # Tenta enviar ao servidor
-        try:
-            self.transmitter.enviar(resultado, self.nome_usuario)
-
-        except ConnectionRefusedError as exc:
-            self._aviso(str(exc))
+        self._atualizar_graficos(exibir)
 
     def _atualizar_graficos(self, resultado: dict):
         mod_digital   = self.transmitter.mod_digital

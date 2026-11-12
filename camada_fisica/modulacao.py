@@ -1,6 +1,6 @@
 '''
 Implementa modulações digitais (NRZ-Polar, Manchester, Bipolar)
-            modulações por portadora (ASK, FSK, QPSK, 16-QAM).
+            modulações por portadora (ASK, FSK, 8PSK, 32-QAM).
 
 As funções devem receber um trem de bits (0s e 1s) - 'dados' - e retornar valores numéricos representando o sinal modulado.
 
@@ -88,70 +88,52 @@ def fsk(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
         tempo_total.extend(t)
     return np.array(tempo_total), np.array(sinal)
 
-_CONSTELACAO_QPSK = {
-    '00': ( 1,  1),
-    '01': (-1,  1),
-    '10': (-1, -1),
-    '11': ( 1, -1),
+# Modulações por constelação (8PSK e 32-QAM) -------------------------------------------------
+
+FS              = 1000   # taxa de amostragem (Hz)
+F_PORTADORA     = 10     # frequência da portadora (Hz): 1 ciclo completo por símbolo
+DURACAO_SIMBOLO = 0.1    # segundos por símbolo
+
+# 8PSK: 3 bits por símbolo, 8 fases espaçadas de 45° (amplitude 1) com código Gray
+_GRAY_8PSK = ['000', '001', '011', '010', '110', '111', '101', '100']
+_CONSTELACAO_8PSK = {
+    cod: (np.cos(k * np.pi / 4), np.sin(k * np.pi / 4))
+    for k, cod in enumerate(_GRAY_8PSK)
 }
 
-def qpsk(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
-    bits_str = ''.join(map(str, dados))
-    # Padding para múltiplo de 2
-    if len(bits_str) % 2 != 0:
-        bits_str += '0'
+# 32-QAM: 5 bits por símbolo, grade 6x6 em formato de cruz (sem os 4 cantos) = 32 pontos
+_NIVEIS_QAM32 = [-5, -3, -1, 1, 3, 5]
+_PONTOS_32QAM = [(i, q) for i in _NIVEIS_QAM32 for q in _NIVEIS_QAM32
+                 if not (abs(i) == 5 and abs(q) == 5)]
+_CONSTELACAO_32QAM = {f'{idx:05b}': ponto for idx, ponto in enumerate(_PONTOS_32QAM)}
 
-    simbolos = [bits_str[i:i+2] for i in range(0, len(bits_str), 2)]
-    fs = 1000 
-    f_portadora = 10
-    duracao_simbolo = 0.1   # cada 0,1 segundo transmite 2 bits
-    t = np.arange(0, len(simbolos) * duracao_simbolo, 1 / fs)
+
+def _modular_constelacao(dados: list[int], bits_por_simbolo: int, constelacao: dict) -> tuple[np.ndarray, np.ndarray]:
+    # Agrupa os bits em símbolos e transmite cada um como I·cos(2πft) - Q·sen(2πft).
+    bits_str = ''.join(map(str, dados))
+    bits_str += '0' * (-len(bits_str) % bits_por_simbolo)   # padding até completar o último símbolo
+
+    simbolos = [bits_str[i:i + bits_por_simbolo] for i in range(0, len(bits_str), bits_por_simbolo)]
+    amostras_por_simbolo = int(DURACAO_SIMBOLO * FS)
+    t = np.arange(len(simbolos) * amostras_por_simbolo) / FS
     sinal = np.zeros_like(t)
 
     for i, s in enumerate(simbolos):
-        I, Q = _CONSTELACAO_QPSK[s]
-        inicio = int(i * duracao_simbolo * fs)
-        fim = int((i + 1) * duracao_simbolo * fs)
+        I, Q = constelacao[s]
+        inicio = i * amostras_por_simbolo
+        fim = inicio + amostras_por_simbolo
         sinal[inicio:fim] = (
-            I * np.cos(2 * np.pi * f_portadora * t[inicio:fim])
-            - Q * np.sin(2 * np.pi * f_portadora * t[inicio:fim])
+            I * np.cos(2 * np.pi * F_PORTADORA * t[inicio:fim])
+            - Q * np.sin(2 * np.pi * F_PORTADORA * t[inicio:fim])
         )
     return t, sinal
 
 
-# Constelação 16-QAM - 16 símbolos (le-se: 4 bits por símbolo)
-_NIVEIS_QAM16 = [-3, -1, 1, 3]
-_CONSTELACAO_16QAM: dict[str, tuple[int, int]] = {}
-idx = 0
-for _i in _NIVEIS_QAM16:
-    for _q in _NIVEIS_QAM16:
-        _CONSTELACAO_16QAM[f'{idx:04b}'] = (_i, _q)
-        idx += 1
+def psk8(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
+    # 8PSK: 3 bits por símbolo.
+    return _modular_constelacao(dados, 3, _CONSTELACAO_8PSK)
 
-_CONSTELACAO_16QAM_INV = {v: k for k, v in _CONSTELACAO_16QAM.items()}
 
-def qam16(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
-    #16-QAM: 4 bits por símbolo, 16 pontos na constelação.
-    #Retorna (tempo, sinal).
-    
-    bits_str = ''.join(map(str, dados))
-    # Padding para múltiplo de 4
-    padding = (4 - len(bits_str) % 4) % 4
-    bits_str += '0' * padding
-
-    simbolos = [bits_str[i:i+4] for i in range(0, len(bits_str), 4)]
-    fs = 1000
-    f_portadora = 10
-    duracao_simbolo = 0.1
-    t = np.arange(0, len(simbolos) * duracao_simbolo, 1 / fs)
-    sinal = np.zeros_like(t)
-
-    for i, s in enumerate(simbolos):
-        I, Q = _CONSTELACAO_16QAM[s]
-        inicio = int(i * duracao_simbolo * fs)
-        fim = int((i + 1) * duracao_simbolo * fs)
-        sinal[inicio:fim] = (
-            I * np.cos(2 * np.pi * f_portadora * t[inicio:fim])
-            - Q * np.sin(2 * np.pi * f_portadora * t[inicio:fim])
-        )
-    return t, sinal
+def qam32(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
+    # 32-QAM: 5 bits por símbolo.
+    return _modular_constelacao(dados, 5, _CONSTELACAO_32QAM)

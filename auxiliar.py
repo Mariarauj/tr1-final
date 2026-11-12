@@ -17,3 +17,16 @@ def bits_para_texto(bits: str) -> str:
             pass
 
     return texto
+
+
+def receber_exato(conn, n: int) -> bytes:
+    #Lê exatamente n bytes de um socket (o TCP pode entregar os dados em pedaços).
+
+    buf = b''
+    while len(buf) < n:
+        pacote = conn.recv(n - len(buf))
+        if not pacote:
+            raise ConnectionError(f'Conexão encerrada — esperava {n} bytes, recebeu {len(buf)}')
+        buf += pacote
+
+    return buf
