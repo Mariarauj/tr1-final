@@ -113,7 +113,4 @@ python main_cliente.py
 
 [RX] Demodulação → Desenquadramento → Correção Hamming → Verificação Detecção → bits → texto
 
-OBS: A escolha pela correção ou detecção de erros será definida pelo nível de ruído, os níveis baixo e médio receberão a detecção de erros, e consequente reenvio dos dados, e o nível alto receberá a correção dos erros (hamming).
-
-
 ```
