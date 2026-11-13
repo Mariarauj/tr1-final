@@ -19,6 +19,8 @@ matplotlib.rcParams['text.usetex'] = False
 matplotlib.rcParams['font.size'] = 9
 matplotlib.rcParams['figure.dpi'] = 80 
 
+AMOSTRAS_POR_BIT = 100   # amostras por bit nos sinais banda-base (1 bit = 1 s no eixo do tempo)
+
 class ClienteUI(Gtk.Window):
     def __init__(self):
         super().__init__(title='Simulador TR1 — Transmissor')
@@ -26,8 +28,6 @@ class ClienteUI(Gtk.Window):
         self.set_default_size(980, 900)
 
         self.transmitter = Transmitter()
-        self.nome_usuario = 'Usuário'
-        self._pedir_nome()
 
         # HeaderBar
         header = Gtk.HeaderBar()
@@ -195,53 +195,6 @@ class ClienteUI(Gtk.Window):
         cb.set_active(0)
         return cb
 
-    def _pedir_nome(self):
-        dlg = Gtk.Dialog(title='Identificação', transient_for=self, flags=0)
-        dlg.add_buttons(Gtk.STOCK_OK, Gtk.ResponseType.OK)
-        dlg.set_default_size(300, 100)
-        area = dlg.get_content_area()
-        area.set_spacing(6)
-        area.add(Gtk.Label(label='Digite seu nome:'))
-        entrada = Gtk.Entry()
-        area.add(entrada)
-        dlg.show_all()
-
-        if dlg.run() == Gtk.ResponseType.OK:
-            self.nome_usuario = entrada.get_text().strip() or 'Usuário'
-
-        dlg.destroy()
-
-    def _pedir_tamanho_quadro(self) -> int | None:
-        """Pergunta ao usuário o tamanho máximo do quadro (em bytes),
-        exibido antes de aplicar o enquadramento por Contagem de
-        Caracteres ou Inserção de Bytes. Retorna None se o usuário
-        cancelar a operação."""
-        dlg = Gtk.Dialog(title='Tamanho do Quadro', transient_for=self, flags=0)
-        dlg.add_buttons(
-            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-            Gtk.STOCK_OK, Gtk.ResponseType.OK,
-        )
-        dlg.set_default_size(320, 120)
-
-        area = dlg.get_content_area()
-        area.set_spacing(6)
-        area.add(Gtk.Label(label='Tamanho máximo do quadro (em bytes):'))
-
-        ajuste = Gtk.Adjustment(
-            value=6, lower=1, upper=1024, step_increment=1, page_increment=8
-        )
-        spin = Gtk.SpinButton()
-        spin.set_adjustment(ajuste)
-        spin.set_numeric(True)
-        area.add(spin)
-        dlg.show_all()
-
-        resposta = dlg.run()
-        tamanho = spin.get_value_as_int() if resposta == Gtk.ResponseType.OK else None
-        dlg.destroy()
-
-        return tamanho
-
     def _aviso(self, msg: str):
         dlg = Gtk.MessageDialog(
             parent=self,
@@ -267,17 +220,6 @@ class ClienteUI(Gtk.Window):
         self.transmitter.media_ruido, self.transmitter.sigma_ruido = (
             NIVEIS_RUIDO[self.combo_ruido.get_active_id()])
 
-        # Pergunta o tamanho máximo do quadro quando o enquadramento exigir
-        if self.transmitter.enquadramento in (
-            'Contagem de Caracteres', 'Entrelaçamento de Bits', 'Inserção de Bytes'
-        ):
-            tamanho = self._pedir_tamanho_quadro()
-            if tamanho is None:
-                return  # usuário cancelou a transmissão
-            self.transmitter.tamanho_maximo_quadro = tamanho
-        else:
-            self.transmitter.tamanho_maximo_quadro = None
-
         try:
             resultado = self.transmitter.processar(texto)
 
@@ -288,7 +230,7 @@ class ClienteUI(Gtk.Window):
         # Envia o sinal limpo ao meio de comunicação (servidor), que soma o AWGN e responde
         resposta = None
         try:
-            resposta = self.transmitter.enviar(resultado, self.nome_usuario)
+            resposta = self.transmitter.enviar(resultado)
 
         except OSError as exc:
             self._aviso(str(exc))
@@ -300,32 +242,41 @@ class ClienteUI(Gtk.Window):
         saida = (
             f"Mensagem      : {resultado['texto']}\n"
             f"Bits (ASCII)  : {resumo(resultado['bits_brutos'])}\n"
-            f"Após Hamming  : {resumo(resultado['bits_hamming'])}\n"
             f"Após Detecção : {resumo(resultado['bits_deteccao'])}\n"
+            f"Após Hamming  : {resumo(resultado['bits_hamming'])}\n"
             f"Enquadrado    : {resumo(resultado['bits_enquadrado'])}\n"
         )
 
         exibir = resultado
         if resposta is not None:
-            recebido = resposta['texto']
-            if recebido is None:
-                recebido = f"[falha no receptor: {resposta['erro']}]"
+            for rotulo, chave in (('Banda-base', 'banda_base'), ('Portadora', 'portadora')):
+                caminho = resposta[chave]
+                recebido = caminho['texto']
+                if recebido is None:
+                    recebido = f"[falha no receptor: {caminho['erro']}]"
+                elif caminho['erro']:
+                    recebido += f"   ⚠ {caminho['erro']}"
 
-            saida += (
-                f"Com Ruído     : {resumo(resposta['bits_ruidosos'])}\n"
-                f"Recebido      : {recebido}\n"
+                saida += (
+                    f"Com Ruído ({rotulo:<10}) : {resumo(caminho['bits_ruidosos'])}\n"
+                    f"Recebido  ({rotulo:<10}) : {recebido}\n"
+                )
+
+            # Os gráficos mostram os sinais que chegaram ao receptor, já com ruído
+            exibir = dict(
+                resultado,
+                sinal_digital=np.array(resposta['banda_base']['sinal_ruidoso']),
+                sinal_portadora=(np.array(resposta['portadora']['tempo']),
+                                 np.array(resposta['portadora']['sinal_ruidoso'])),
             )
-
-            # A portadora exibida é a que chegou ao receptor, já com ruído
-            exibir = dict(resultado, sinal_portadora=(
-                np.array(resposta['tempo']), np.array(resposta['sinal_ruidoso'])))
 
         self.label_saida.set_text(saida)
 
         # Atualiza gráficos
-        self._atualizar_graficos(exibir)
+        self._atualizar_graficos(exibir, resultado)
 
-    def _atualizar_graficos(self, resultado: dict):
+    def _atualizar_graficos(self, resultado: dict, limpo: dict):
+        # resultado: sinais exibidos (com ruído, se houver); limpo: sinais originais, desenhados em cinza ao fundo
         mod_digital   = self.transmitter.mod_digital
         mod_portadora = self.transmitter.mod_portadora
 
@@ -339,20 +290,25 @@ class ClienteUI(Gtk.Window):
         for filho in self.scroll_graf1.get_children():
             self.scroll_graf1.remove(filho)
 
-        sinal_d = resultado['sinal_digital']
+        sinal_d = np.asarray(resultado['sinal_digital'])
+        limpo_d = np.asarray(limpo['sinal_digital'])
+        tempo_d = np.arange(len(sinal_d)) / AMOSTRAS_POR_BIT
         if len(sinal_d) > MAX_PTS:
             idx = np.linspace(0, len(sinal_d) - 1, MAX_PTS, dtype=int)
             sinal_d = sinal_d[idx]
+            limpo_d = limpo_d[idx]
+            tempo_d = tempo_d[idx]
 
         fig1 = Figure(figsize=(12, 2.5), dpi=80)
         ax1  = fig1.add_subplot(1, 1, 1)
-        fig1.subplots_adjust(top=0.95, bottom=0.05, left=0.01, right=0.99)
-        ax1.set_xticks([])
-        ax1.set_yticks([])
-        ax1.tick_params(labelbottom=False, labelleft=False,
-                        labeltop=False, labelright=False)
+        fig1.subplots_adjust(top=0.95, bottom=0.22, left=0.07, right=0.99)
+        ax1.set_xlabel('Tempo (s)')
+        ax1.set_ylabel('Tensão (V)')
         
-        ax1.step(range(len(sinal_d)), sinal_d, where='post',
+        ax1.step(tempo_d, limpo_d, where='post',
+                color='lightgray', linewidth=2.0)       # sinal original, ao fundo
+
+        ax1.step(tempo_d, sinal_d, where='post',
                 color='steelblue', linewidth=1.0)
         
         ax1.grid(True, alpha=0.3)
@@ -366,20 +322,21 @@ class ClienteUI(Gtk.Window):
             self.scroll_graf2.remove(filho)
 
         tempo, sinal_p = resultado['sinal_portadora']
+        limpo_p = np.asarray(limpo['sinal_portadora'][1])
 
         if len(sinal_p) > MAX_PTS:
             idx = np.linspace(0, len(sinal_p) - 1, MAX_PTS, dtype=int)
             tempo   = tempo[idx]
             sinal_p = sinal_p[idx]
+            limpo_p = limpo_p[idx]
 
         fig2 = Figure(figsize=(12, 2.5), dpi=80)
         ax2  = fig2.add_subplot(1, 1, 1)
-        fig2.subplots_adjust(top=0.95, bottom=0.05, left=0.01, right=0.99)
-        ax2.set_xticks([])
-        ax2.set_yticks([])
-        ax2.tick_params(labelbottom=False, labelleft=False,
-                        labeltop=False, labelright=False)
+        fig2.subplots_adjust(top=0.95, bottom=0.22, left=0.07, right=0.99)
+        ax2.set_xlabel('Tempo (s)')
+        ax2.set_ylabel('Tensão (V)')
         
+        ax2.plot(tempo, limpo_p, color='lightgray', linewidth=2.0)   # sinal original, ao fundo
         ax2.plot(tempo, sinal_p, color='darkorange', linewidth=0.8)
         ax2.grid(True, alpha=0.3)
 

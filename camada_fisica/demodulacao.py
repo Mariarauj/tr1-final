@@ -16,7 +16,7 @@ def demod_nrz_polar(sinal: np.ndarray) -> list[int]:
 
 
 def demod_manchester(sinal: np.ndarray) -> list[int]:
-    amostras_por_bit = 200 #100 pra cada, baby
+    amostras_por_bit = 100   # 2 metades de 50 amostras (igual ao modulador)
     bits = []
     for i in range(0, len(sinal), amostras_por_bit):
         segmento = sinal[i:i + amostras_por_bit]
@@ -36,7 +36,7 @@ def demod_bipolar(sinal: np.ndarray) -> list[int]:
         segmento = sinal[i:i + amostras_por_bit]
         if len(segmento) < amostras_por_bit:
             break
-        bits.append(0 if abs(np.mean(segmento)) < 0.1 else 1)
+        bits.append(0 if abs(np.mean(segmento)) < 0.5 else 1)   # níveis 0 e ±V: limiar V/2
     return bits
 
 

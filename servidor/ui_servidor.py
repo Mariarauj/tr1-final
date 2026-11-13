@@ -63,19 +63,10 @@ class ServidorUI(Gtk.Window):
         scroll.set_vexpand(True)
         scroll.add(self.text_view)
 
-        # Botão iniciar
-        self.btn_iniciar = Gtk.Button(label='🚀  Iniciar Servidor')
-        self.btn_iniciar.connect('clicked', self._ao_iniciar)
-        self.btn_iniciar.set_hexpand(True)
-        vbox.pack_start(self.btn_iniciar, False, False, 0)
         vbox.pack_start(scroll, True, True, 0)
 
-        # Receptor (não iniciado ainda)
+        # Receptor: o servidor já inicia ligado, junto com a janela
         self.receiver = Receiver(self._atualizar_ui)
-
-    def _ao_iniciar(self, _btn):
-        self.btn_iniciar.set_label('✅  Servidor em execução')
-        self.btn_iniciar.set_sensitive(False)
         self.receiver.iniciar()
         self._adicionar_texto('✅ Servidor iniciado com sucesso!\n')
 

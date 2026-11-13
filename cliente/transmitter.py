@@ -1,5 +1,5 @@
 '''
-Encapsula toda a cadeia de processamento: texto - bits - Hamming - detecção de erros
+Encapsula toda a cadeia de processamento: texto - bits - detecção de erros - Hamming
 - enquadramento - modulação digital - modulação por portadora - envio TCP
 (μ e σ do ruído gaussiano são configurados aqui e aplicados pelo meio de comunicação, no servidor)
 
@@ -31,7 +31,7 @@ from camada_fisica.modulacao import (
 HOST = '127.0.0.1'
 PORT = 5000
 
-TAMANHO_QUADRO_PADRAO = 6  # usado quando o usuário não informar nenhum valor
+TAMANHO_QUADRO = 8  # tamanho do quadro, em bytes, usado nos enquadramentos
 
 
 class Transmitter:
@@ -44,7 +44,6 @@ class Transmitter:
         deteccao: str = 'CRC',
         media_ruido: float = 0.0,
         sigma_ruido: float = 0.05,
-        tamanho_maximo_quadro: int | None = None,
     ):
         self.mod_digital   = mod_digital
         self.mod_portadora = mod_portadora
@@ -52,7 +51,6 @@ class Transmitter:
         self.deteccao      = deteccao
         self.media_ruido   = media_ruido
         self.sigma_ruido   = sigma_ruido
-        self.tamanho_maximo_quadro = tamanho_maximo_quadro
 
     # Pipeline de codificação (TX)
     def codificar_texto(self, texto: str) -> str:
@@ -80,17 +78,14 @@ class Transmitter:
         cabecalho_pad = format(pad_len, '08b')
         bits = cabecalho_pad + bits + '0' * pad_len
 
-        # Usa o valor informado pelo usuário; se não houver, cai no padrão
-        tamanho_quadro = self.tamanho_maximo_quadro or TAMANHO_QUADRO_PADRAO
-
         if self.enquadramento == 'Contagem de Caracteres':
-            return transmissor_contagem(bits, tamanho_quadro)
+            return transmissor_contagem(bits, TAMANHO_QUADRO)
 
         elif self.enquadramento == 'Inserção de Bytes':
-            return transmissor_insercao_bytes(bits, tamanho_quadro)
+            return transmissor_insercao_bytes(bits, TAMANHO_QUADRO)
 
         elif self.enquadramento == 'Entrelaçamento de Bits':
-            return transmissor_entrelacamento(bits, tamanho_quadro)
+            return transmissor_entrelacamento(bits, TAMANHO_QUADRO)
 
         else:                                   # Inserção de Bits
             return transmissor_insercao_bits(bits)
@@ -124,9 +119,9 @@ class Transmitter:
     # Pipeline completo
     def processar(self, texto: str) -> dict: 
         bits_brutos     = self.codificar_texto(texto)
-        bits_hamming    = self.aplicar_hamming(bits_brutos)
-        bits_deteccao   = self.aplicar_deteccao(bits_hamming)
-        bits_enquadrado = self.aplicar_enquadramento(bits_deteccao)
+        bits_deteccao   = self.aplicar_deteccao(bits_brutos)    # 1º: código de detecção escolhido
+        bits_hamming    = self.aplicar_hamming(bits_deteccao)   # 2º: Hamming sobre dados + código
+        bits_enquadrado = self.aplicar_enquadramento(bits_hamming)
 
         lista_bits = [int(b) for b in bits_enquadrado]
 
@@ -146,19 +141,21 @@ class Transmitter:
 
     
     # Envio via TCP
-    def enviar(self, resultado: dict, nome: str) -> dict:
-        # Envia o sinal limpo ao meio de comunicação (servidor) e devolve a resposta dele:
-        # sinal ruidoso, bits ruidosos (antes de qualquer tratamento) e texto recebido.
+    def enviar(self, resultado: dict) -> dict:
+        # Envia os sinais limpos (banda-base e portadora) ao meio de comunicação (servidor) e
+        # devolve a resposta dele. Para cada caminho ('banda_base' e 'portadora'): sinal ruidoso,
+        # bits ruidosos (antes de qualquer tratamento) e texto recebido.
         t, sinal = resultado['sinal_portadora']
 
         payload = {
-            'nome'         : nome,
+            'modulacao_digital': self.mod_digital,
             'modulacao'    : self.mod_portadora,
             'enquadramento': self.enquadramento,
             'deteccao'     : self.deteccao,
             'media_ruido'  : self.media_ruido,
             'sigma_ruido'  : self.sigma_ruido,
             'n_bits'       : len(resultado['bits_enquadrado']),   # descarta o padding do último símbolo
+            'sinal_digital': np.asarray(resultado['sinal_digital']).tolist(),
             'tempo'        : t.tolist() if hasattr(t, 'tolist') else list(t),
             'sinal'        : sinal.tolist() if hasattr(sinal, 'tolist') else list(sinal),
         }

@@ -3,7 +3,7 @@ import numpy as np
 # Níveis de ruído do canal: (média μ, desvio padrão σ) em volts.
 # Com 100 amostras por bit o demodulador faz uma média que atenua o ruído, por isso os σ são altos.
 NIVEIS_RUIDO = {
-    'Baixo': (0.0, 0.5),   # sinal visivelmente ruidoso, praticamente sem erros de bit
+    'Baixo': (0.0, 0.2),   # sinal visivelmente ruidoso, praticamente sem erros de bit
     'Médio': (0.0, 2.0),   # começam a aparecer erros de bit
     'Alto' : (0.0, 5.0),   # muitos erros de bit
 }
