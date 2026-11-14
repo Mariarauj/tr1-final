@@ -54,7 +54,6 @@ tr1-final/
 | Protocolo             | Descrição                                    |
 |-----------------------|----------------------------------------------|
 | Contagem de Caracteres| Cabeçalho de 1 byte indica tamanho do quadro |
-| Entrelaçamento de bits| Trens de bits 'empilhados' com um bit de paridade por coluna        |
 | Inserção de Bytes     | FLAG + ESC para delimitação e escape         |
 | Inserção de Bits      | Flag 01111110 + bit stuffing após 5 uns      |
 
@@ -64,11 +63,12 @@ tr1-final/
 | Paridade Par| 1 bit de paridade ao final da mensagem        |
 | Checksum    | Soma em complemento de 1 (16 bits)            |
 | CRC-32      | Polinômio IEEE 802.3 (0x04C11DB7)             |
+| Entrelaçamento de bits | Matriz de 8 colunas enviada coluna a coluna, com paridade par por coluna |
 
 ### Camada de Enlace — Correção de Erros
 | Protocolo | Descrição                                      |
 |-----------|------------------------------------------------|
-| Hamming   | Detecta e corrige 1 bit de erro por mensagem   |
+| Hamming   | Hamming(12,8) por byte: corrige 1 bit de erro por bloco |
 
 ---
 
@@ -108,9 +108,9 @@ python main_cliente.py
 ## Pipeline de Simulação
 
 ```
-[TX] texto → bits → Detecção Erros → Hamming → Enquadramento
+[TX] Texto → Bits → Detecção Erros → Hamming → Enquadramento
      → Modulação Digital (gráfico) e Modulação Portadora → Ruído
 
-[RX] Demodulação → Desenquadramento → Correção Hamming → Verificação Detecção → bits → texto
+[RX] Demodulação → Desenquadramento → Correção Hamming → Verificação Detecção → Bits → Texto
 
 ```

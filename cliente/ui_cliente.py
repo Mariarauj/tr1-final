@@ -13,7 +13,11 @@ import numpy as np #analise de dados
 from matplotlib.figure import Figure
 from cliente.transmitter import Transmitter
 from camada_fisica.ruido import NIVEIS_RUIDO
-from matplotlib.backends.backend_gtk3agg import FigureCanvasGTK3Agg as FigureCanvas
+try:
+    # Canvas Cairo: desenha os textos dos eixos com o próprio Cairo/GTK
+    from matplotlib.backends.backend_gtk3cairo import FigureCanvasGTK3Cairo as FigureCanvas
+except ImportError:
+    from matplotlib.backends.backend_gtk3agg import FigureCanvasGTK3Agg as FigureCanvas
 
 matplotlib.rcParams['text.usetex'] = False
 matplotlib.rcParams['font.size'] = 9
@@ -94,11 +98,10 @@ class ClienteUI(Gtk.Window):
             ['ASK', 'FSK', '8PSK', '32-QAM'])
         
         self.combo_enquadramento = self._combo(
-            ['Contagem de Caracteres', 'Entrelaçamento de Bits',
-             'Inserção de Bytes', 'Inserção de Bits'])
+            ['Contagem de Caracteres', 'Inserção de Bytes', 'Inserção de Bits'])
         
         self.combo_deteccao = self._combo(
-            ['Paridade Par', 'Checksum', 'CRC'])
+            ['Paridade Par', 'Checksum', 'CRC', 'Entrelaçamento de Bits'])
         
         self.combo_deteccao.set_active(2)   # CRC como padrão
 
@@ -240,28 +243,15 @@ class ClienteUI(Gtk.Window):
             return s[:max_len] + ('…' if len(s) > max_len else '')
 
         saida = (
-            f"Mensagem      : {resultado['texto']}\n"
-            f"Bits (ASCII)  : {resumo(resultado['bits_brutos'])}\n"
-            f"Após Detecção : {resumo(resultado['bits_deteccao'])}\n"
-            f"Após Hamming  : {resumo(resultado['bits_hamming'])}\n"
-            f"Enquadrado    : {resumo(resultado['bits_enquadrado'])}\n"
+            f"  - Mensagem transmitida: {resultado['texto']}\n"
+            f"  - Mensagem convertida para bits: {resumo(resultado['bits_brutos'])}\n"
+            f"  - Bits com enquadramento: {resumo(resultado['bits_enquadrado'])}\n"
+            f"  - Bits com a detecção de erro aplicada: {resumo(resultado['bits_deteccao'])}\n"
+            f"  - Bits com o hamming aplicado: {resumo(resultado['bits_hamming'])}\n"
         )
 
         exibir = resultado
         if resposta is not None:
-            for rotulo, chave in (('Banda-base', 'banda_base'), ('Portadora', 'portadora')):
-                caminho = resposta[chave]
-                recebido = caminho['texto']
-                if recebido is None:
-                    recebido = f"[falha no receptor: {caminho['erro']}]"
-                elif caminho['erro']:
-                    recebido += f"   ⚠ {caminho['erro']}"
-
-                saida += (
-                    f"Com Ruído ({rotulo:<10}) : {resumo(caminho['bits_ruidosos'])}\n"
-                    f"Recebido  ({rotulo:<10}) : {recebido}\n"
-                )
-
             # Os gráficos mostram os sinais que chegaram ao receptor, já com ruído
             exibir = dict(
                 resultado,

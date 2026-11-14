@@ -3,6 +3,7 @@ Implementa:
   1. Bit de paridade par
   2. Checksum
   3. CRC
+  4. Entrelaçamento de bits (paridade por coluna)
 
 '''
 
@@ -83,3 +84,43 @@ def receptor_crc(bits: str) -> tuple[bool, str]:
     crc_recebido = bits[-32:]
     crc_calculado = _crc32_calcular(dado)
     return (crc_recebido == crc_calculado, dado)
+
+
+
+# 4. Entrelaçamento de bits (paridade por coluna)
+# Os bits formam uma matriz de 8 COLUNAS (uma linha por byte). Em vez de enviar linha por
+# linha, o transmissor envia coluna por coluna (de cima para baixo), e ao fim de cada coluna
+# vai o seu bit de paridade par. Uma rajada de erros fica espalhada em colunas diferentes.
+# Se o número de bits não for múltiplo de 8, a última linha fica incompleta (só existem as
+# primeiras k células): não há padding, pois o receptor deduz o formato pelo tamanho total
+# (tamanho = dados + 8 bits de paridade).
+def _colunas(bits: str) -> list[str]:
+    return [bits[c::8] for c in range(8)]
+
+
+def transmissor_entrelacamento(bits: str) -> str:
+    saida = []
+    for coluna in _colunas(bits):
+        paridade = '1' if coluna.count('1') % 2 else '0'
+        saida.append(coluna + paridade)
+    return ''.join(saida)
+
+
+def receptor_entrelacamento(bits: str) -> tuple[bool, str]:
+    n_dados = len(bits) - 8
+    if n_dados < 0:
+        return (False, '')
+
+    linhas, resto = divmod(n_dados, 8)    # as `resto` primeiras colunas têm uma célula a mais
+    colunas, valido, pos = [], True, 0
+    for c in range(8):
+        tam = linhas + (1 if c < resto else 0)
+        coluna, paridade = bits[pos:pos + tam], bits[pos + tam]
+        pos += tam + 1
+        colunas.append(coluna)
+        if ('1' if coluna.count('1') % 2 else '0') != paridade:
+            valido = False
+
+    # reconstrói a ordem original: bit i está na coluna i % 8, posição i // 8
+    dado = ''.join(colunas[i % 8][i // 8] for i in range(n_dados))
+    return (valido, dado)

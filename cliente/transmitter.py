@@ -1,6 +1,6 @@
 '''
-Encapsula toda a cadeia de processamento: texto - bits - detecção de erros - Hamming
-- enquadramento - modulação digital - modulação por portadora - envio TCP
+Encapsula toda a cadeia de processamento: texto - bits - enquadramento - detecção de erros
+- Hamming - modulação digital - modulação por portadora - envio TCP
 (μ e σ do ruído gaussiano são configurados aqui e aplicados pelo meio de comunicação, no servidor)
 
 '''
@@ -11,15 +11,15 @@ import struct
 import numpy as np
 
 from auxiliar import texto_para_bits, receber_exato
-from camada_enlace.hamming import transmissor_hamming
+from camada_enlace.hamming import transmissor_hamming_blocos
 from camada_enlace.deteccao_erros import (
     transmissor_paridade,
     transmissor_checksum,
     transmissor_crc,
+    transmissor_entrelacamento,
 )
 from camada_enlace.enquadramento import (
     transmissor_contagem,
-    transmissor_entrelacamento,
     transmissor_insercao_bytes,
     transmissor_insercao_bits,
 )
@@ -59,7 +59,7 @@ class Transmitter:
 
     def aplicar_hamming(self, bits: str) -> str:
         # codifica para Hamming.
-        return transmissor_hamming(bits)
+        return transmissor_hamming_blocos(bits)
 
     def aplicar_deteccao(self, bits: str) -> str:
         # seleciona a detecção de erros
@@ -68,24 +68,20 @@ class Transmitter:
         
         elif self.deteccao == 'Checksum':
             return transmissor_checksum(bits)
+
+        elif self.deteccao == 'Entrelaçamento de Bits':
+            return transmissor_entrelacamento(bits)
         
         else:                                
             return transmissor_crc(bits)
 
     def aplicar_enquadramento(self, bits: str) -> str: # Seleciona o enquadramento.
-        resto = len(bits) % 8
-        pad_len = (8 - resto) % 8
-        cabecalho_pad = format(pad_len, '08b')
-        bits = cabecalho_pad + bits + '0' * pad_len
-
+        # O texto é codificado em bytes (8 bits por caractere): não há padding a registrar.
         if self.enquadramento == 'Contagem de Caracteres':
             return transmissor_contagem(bits, TAMANHO_QUADRO)
 
         elif self.enquadramento == 'Inserção de Bytes':
             return transmissor_insercao_bytes(bits, TAMANHO_QUADRO)
-
-        elif self.enquadramento == 'Entrelaçamento de Bits':
-            return transmissor_entrelacamento(bits, TAMANHO_QUADRO)
 
         else:                                   # Inserção de Bits
             return transmissor_insercao_bits(bits)
@@ -119,11 +115,11 @@ class Transmitter:
     # Pipeline completo
     def processar(self, texto: str) -> dict: 
         bits_brutos     = self.codificar_texto(texto)
-        bits_deteccao   = self.aplicar_deteccao(bits_brutos)    # 1º: código de detecção escolhido
-        bits_hamming    = self.aplicar_hamming(bits_deteccao)   # 2º: Hamming sobre dados + código
-        bits_enquadrado = self.aplicar_enquadramento(bits_hamming)
+        bits_enquadrado = self.aplicar_enquadramento(bits_brutos)   # 1º: quadros (flags, contagem...)
+        bits_deteccao   = self.aplicar_deteccao(bits_enquadrado)    # 2º: detecção escolhida, sobre o quadro
+        bits_hamming    = self.aplicar_hamming(bits_deteccao)       # 3º: Hamming por bloco de 8 bits (flags inclusive)
 
-        lista_bits = [int(b) for b in bits_enquadrado]
+        lista_bits = [int(b) for b in bits_hamming]
 
         # Modulação dos sinais (limpos: o ruído é somado depois, pelo meio de comunicação)
         sinal_digital          = self.modular_digital(lista_bits)
@@ -154,7 +150,9 @@ class Transmitter:
             'deteccao'     : self.deteccao,
             'media_ruido'  : self.media_ruido,
             'sigma_ruido'  : self.sigma_ruido,
-            'n_bits'       : len(resultado['bits_enquadrado']),   # descarta o padding do último símbolo
+            'mensagem'     : resultado['texto'],   # exibida no servidor como "mensagem esperada"
+            'n_dados'      : len(resultado['bits_deteccao']),  # tamanho antes do Hamming (descarta padding do último bloco)
+            'n_bits'       : len(resultado['bits_hamming']),   # descarta o padding do último símbolo
             'sinal_digital': np.asarray(resultado['sinal_digital']).tolist(),
             'tempo'        : t.tolist() if hasattr(t, 'tolist') else list(t),
             'sinal'        : sinal.tolist() if hasattr(sinal, 'tolist') else list(sinal),

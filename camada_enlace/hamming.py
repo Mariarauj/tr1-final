@@ -61,3 +61,26 @@ def receptor_hamming(bits: str) -> tuple[str, int]:
             dados.append(str(codificado[i - 1]))
 
     return ''.join(dados), pos_erro
+
+
+TAMANHO_BLOCO = 8   # bits de dados por bloco -> Hamming(12,8), corrige 1 erro por bloco
+
+
+def transmissor_hamming_blocos(bits: str, tam: int = TAMANHO_BLOCO) -> str:
+    # Aplica Hamming a cada bloco de `tam` bits (último bloco completado com zeros).
+    resto = len(bits) % tam
+    if resto:
+        bits += '0' * (tam - resto)
+    return ''.join(transmissor_hamming(bits[i:i + tam]) for i in range(0, len(bits), tam))
+
+
+def receptor_hamming_blocos(bits: str, n_dados: int, tam: int = TAMANHO_BLOCO) -> tuple[str, list[int]]:
+    # Decodifica bloco a bloco. Retorna (dados, posições corrigidas como [(bloco, pos)]).
+    n_cod = len(transmissor_hamming('0' * tam))
+    dados, corrigidos = [], []
+    for b, i in enumerate(range(0, len(bits) - n_cod + 1, n_cod)):
+        d, pos = receptor_hamming(bits[i:i + n_cod])
+        dados.append(d)
+        if pos:
+            corrigidos.append((b, pos))
+    return ''.join(dados)[:n_dados], corrigidos

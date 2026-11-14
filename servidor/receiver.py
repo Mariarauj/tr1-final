@@ -1,6 +1,6 @@
 '''
 Decodifica o sinal:
-  sinal portadora - ruído AWGN do canal - demodulação - desenquadramento - correção Hamming - detecção de erros - bits - texto
+  sinal portadora - ruído AWGN do canal - demodulação - correção Hamming - detecção de erros - desenquadramento - bits - texto
   
 '''
 import json
@@ -11,15 +11,15 @@ import threading
 import numpy as np
 
 from auxiliar import bits_para_texto, receber_exato
-from camada_enlace.hamming import receptor_hamming
+from camada_enlace.hamming import receptor_hamming_blocos
 from camada_enlace.deteccao_erros import (
     receptor_paridade,
     receptor_checksum,
     receptor_crc,
+    receptor_entrelacamento,
 )
 from camada_enlace.enquadramento import (
     receptor_contagem,
-    receptor_entrelacamento,
     receptor_insercao_bytes,
     receptor_insercao_bits,
 )
@@ -90,6 +90,8 @@ class Receiver:
         portadora_limpa = np.array(payload.get('sinal', []))
         media       = payload.get('media_ruido', 0.0)
         sigma       = payload.get('sigma_ruido', 0.05)
+        n_dados     = payload.get('n_dados')
+        self._esperada = payload.get('mensagem', '')   # só para exibição/comparação no simulador
         n_bits      = payload.get('n_bits')   # nº de bits úteis (sem o padding do último símbolo)
 
         self._log(f'Modulação digital       : {mod_digital}\n')
@@ -112,12 +114,12 @@ class Receiver:
             self._executar_caminho(
                 f'BANDA-BASE ({mod_digital})', resposta['banda_base'],
                 lambda: self._demodular_digital(mod_digital, sinal_digital),
-                n_bits, enquadr, deteccao)
+                n_bits, n_dados, enquadr, deteccao)
 
             self._executar_caminho(
                 f'PORTADORA ({modulacao})', resposta['portadora'],
                 lambda: self._demodular_portadora(modulacao, tempo, sinal_portadora),
-                n_bits, enquadr, deteccao)
+                n_bits, n_dados, enquadr, deteccao)
 
         finally:
             self._enviar_resposta(conn, resposta)
@@ -130,18 +132,19 @@ class Receiver:
             caminho['tempo'] = tempo.tolist()
         return caminho
 
-    def _executar_caminho(self, titulo, resultado, demodular, n_bits, enquadr, deteccao):
+    def _executar_caminho(self, titulo, resultado, demodular, n_bits, n_dados, enquadr, deteccao):
         # Demodula o sinal do caminho e desfaz o enlace; uma falha aqui não impede o outro caminho.
         self._log(f'── {titulo} ──\n')
+        self._log(f'  - Mensagem esperada: {self._esperada}\n')
         try:
             bits = ''.join(map(str, demodular()))[:n_bits]
             resultado['bits_ruidosos'] = bits    # o que chegou do canal, antes de qualquer tratamento
-            self._log(f'Bits demodulados : {self._resumo(bits)}\n')
-            self._desfazer_enlace(bits, enquadr, deteccao, resultado)
+            self._log(f'  - Bits recebidos: {self._resumo(bits)}\n')
+            self._desfazer_enlace(bits, n_dados, enquadr, deteccao, resultado)
 
         except Exception as exc:
             resultado['erro'] = str(exc)
-            self._log(f'[ERRO] {exc}\n')
+            self._log(f'  - Mensagem recebida: [ERRO] {exc}\n')
 
         self._log('\n')
 
@@ -174,76 +177,53 @@ class Receiver:
 
         raise ValueError(f'Modulação desconhecida: {nome}')
 
-    def _desfazer_enlace(self, bits: str, enquadr: str, deteccao: str, resultado: dict):
-        # Cadeia RX comum aos dois caminhos: desenquadramento - detecção - correção - texto.
-
-        #Desenquadramento
-        if enquadr == 'Contagem de Caracteres':
-            bits_desenq = receptor_contagem(bits)
-
-        elif enquadr == 'Entrelaçamento de Bits':
-            bits_desenq = receptor_entrelacamento(bits)
-
-        elif enquadr == 'Inserção de Bytes':
-            bits_desenq = receptor_insercao_bytes(bits)
-
+    def _desfazer_enlace(self, bits: str, n_dados: int, enquadr: str, deteccao: str, resultado: dict):
+        # Cadeia RX comum aos dois caminhos: Hamming - detecção - desenquadramento - texto.
+        # Hamming: primeiro a ser desfeito; protege o quadro inteiro (flags inclusive)
+        bits_corrigidos, corrigidos = receptor_hamming_blocos(bits, n_dados)
+        if corrigidos:
+            diag_hamming = (f'{len(corrigidos)} bloco(s) com erro corrigido '
+                            f'(bloco, posição): {corrigidos}')
         else:
-            bits_desenq = receptor_insercao_bits(bits)
+            diag_hamming = 'nenhum erro encontrado'
+        self._log(f'  - Diagnóstico do Hamming: {diag_hamming}\n')
+
+        # Detecção de erros: confere a integridade depois da correção
+        if deteccao == 'Paridade Par':
+            nome, (valido, bits_sem_det) = 'Paridade', receptor_paridade(bits_corrigidos)
+        elif deteccao == 'Checksum':
+            nome, (valido, bits_sem_det) = 'Checksum', receptor_checksum(bits_corrigidos)
+        elif deteccao == 'Entrelaçamento de Bits':
+            nome, (valido, bits_sem_det) = 'Entrelaçamento (paridade por coluna)', receptor_entrelacamento(bits_corrigidos)
+        else:
+            nome, (valido, bits_sem_det) = 'CRC-32', receptor_crc(bits_corrigidos)
+
+        if valido:
+            self._log(f'  - Diagnóstico da detecção de erros: {nome} válido, nenhum erro detectado\n')
+        else:
+            resultado['erro'] = 'erro de integridade detectado e não corrigido'
+            self._log(f'  - Diagnóstico da detecção de erros: {nome} ERRO DETECTADO '
+                      '(mensagem possivelmente corrompida)\n')
+
+        # Desenquadramento
+        if enquadr == 'Contagem de Caracteres':
+            bits_desenq = receptor_contagem(bits_sem_det)
+        elif enquadr == 'Inserção de Bytes':
+            bits_desenq = receptor_insercao_bytes(bits_sem_det)
+        else:
+            bits_desenq = receptor_insercao_bits(bits_sem_det)
 
         if bits_desenq == '-1':
             resultado['erro'] = 'quadro inválido no desenquadramento'
-            self._log('[AVISO] Erro no desenquadramento — quadro inválido.\n')
+            self._log(f'  - Bits tratados: {self._resumo(bits_sem_det)} (desenquadramento falhou)\n')
+            self._log('  - Mensagem recebida: [ERRO] quadro inválido no desenquadramento\n')
             return
 
-        self._log(f'Após desenquadramento : {self._resumo(bits_desenq)}\n')
-        if len(bits_desenq) < 8:
-            resultado['erro'] = 'quadro curto demais (cabeçalho de padding ausente)'
-            self._log('[AVISO] Quadro muito curto — cabeçalho de padding ausente.\n')
-            return
+        self._log(f'  - Bits tratados: {self._resumo(bits_desenq)}\n')
 
-        pad_len = int(bits_desenq[:8], 2)
-        bits_desenq = bits_desenq[8:]
-        if pad_len > 0:
-            bits_desenq = bits_desenq[:-pad_len]
-
-        #Correção de erros (Hamming): desfaz a última codificação aplicada pelo transmissor
-        try:
-            bits_corrigidos, pos_erro = receptor_hamming(bits_desenq)
-            if pos_erro > 0:
-                self._log(
-                    f'Hamming : erro corrigido na posição {pos_erro} ✓\n'
-                )
-            else:
-                self._log('Hamming : nenhum erro encontrado ✓\n')
-            self._log(f'Bits corrigidos : {self._resumo(bits_corrigidos)}\n')
-
-        except Exception as exc:
-            self._log(f'[ERRO Hamming] {exc}\n')
-            bits_corrigidos = bits_desenq
-
-        #Detecção de erros: confere a integridade depois da correção
-        if deteccao == 'Paridade Par':
-            valido, bits_sem_det = receptor_paridade(bits_corrigidos)
-            self._log(f'Paridade : {"✓ válida" if valido else "✗ ERRO DETECTADO"}\n')
-
-        elif deteccao == 'Checksum':
-            valido, bits_sem_det = receptor_checksum(bits_corrigidos)
-            self._log(f'Checksum : {"✓ válido" if valido else "✗ ERRO DETECTADO"}\n')
-
-        else:
-            valido, bits_sem_det = receptor_crc(bits_corrigidos)
-            self._log(f'CRC-32 : {"✓ válido" if valido else "✗ ERRO DETECTADO"}\n')
-
-        if not valido:
-            resultado['erro'] = 'erro de integridade detectado e não corrigido'
-            self._log('[AVISO] Erro de integridade detectado mesmo após o Hamming — mensagem possivelmente corrompida.\n')
-
-        self._log(f'Bits sem detecção : {self._resumo(bits_sem_det)}\n')
-
-        #Conversão final para texto
-        texto = bits_para_texto(bits_sem_det)
+        texto = bits_para_texto(bits_desenq)
         resultado['texto'] = texto
-        self._log(f'\n✉  Mensagem recebida: "{texto}"\n')
+        self._log(f'  - Mensagem recebida: {texto}\n')
 
     def _enviar_resposta(self, conn: socket.socket, resposta: dict):
         # Devolve ao transmissor, para cada caminho, o sinal ruidoso, os bits ruidosos e o texto decodificado.
