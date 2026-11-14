@@ -21,31 +21,29 @@ def receptor_paridade(bits: str) -> tuple[bool, str]:
 
 
 
-# 2. Checksum 
+# 2. Checksum (palavras de 8 bits, soma em complemento de 1)
 def _checksum_calcular(bits: str) -> str:
-    # Padding para múltiplo de 16
-    padding = (16 - len(bits) % 16) % 16
+    # Padding para múltiplo de 8 (só dentro do cálculo; não é transmitido)
+    padding = (8 - len(bits) % 8) % 8
     bits_pad = bits + '0' * padding
 
     soma = 0
-    for i in range(0, len(bits_pad), 16):
-        palavra = int(bits_pad[i:i+16], 2)
-        soma += palavra
+    for i in range(0, len(bits_pad), 8):
+        soma += int(bits_pad[i:i+8], 2)
+        soma = (soma & 0xFF) + (soma >> 8)      # vai-um volta para a soma
 
-        soma = (soma & 0xFFFF) + (soma >> 16)
-
-    return format(~soma & 0xFFFF, '016b')
+    return format(~soma & 0xFF, '08b')
 
 
 def transmissor_checksum(bits: str) -> str:
-    #Acrescenta o checksum de 16 bits ao final da string de bits.
+    #Acrescenta o checksum de 8 bits ao final da string de bits.
     return bits + _checksum_calcular(bits)
 
 
 def receptor_checksum(bits: str) -> tuple[bool, str]:
-    #Verifica o checksum de 16 bits.
-    dado = bits[:-16]
-    checksum_recebido = bits[-16:]
+    #Verifica o checksum de 8 bits.
+    dado = bits[:-8]
+    checksum_recebido = bits[-8:]
     checksum_calculado = _checksum_calcular(dado)
     return (checksum_recebido == checksum_calculado, dado)
 

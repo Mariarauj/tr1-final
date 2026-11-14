@@ -61,7 +61,7 @@ tr1-final/
 | Protocolo   | Descrição                                     |
 |-------------|-----------------------------------------------|
 | Paridade Par| 1 bit de paridade ao final da mensagem        |
-| Checksum    | Soma em complemento de 1 (16 bits)            |
+| Checksum    | Soma em complemento de 1 (palavras de 8 bits)            |
 | CRC-32      | Polinômio IEEE 802.3 (0x04C11DB7)             |
 | Entrelaçamento de bits | Matriz de 8 colunas enviada coluna a coluna, com paridade par por coluna |
 
@@ -108,9 +108,9 @@ python main_cliente.py
 ## Pipeline de Simulação
 
 ```
-[TX] Texto → Bits → Detecção Erros → Hamming → Enquadramento
+[TX] texto → bits → Detecção Erros → Hamming → Enquadramento
      → Modulação Digital (gráfico) e Modulação Portadora → Ruído
 
-[RX] Demodulação → Desenquadramento → Correção Hamming → Verificação Detecção → Bits → Texto
+[RX] Demodulação → Desenquadramento → Correção Hamming → Verificação Detecção → bits → texto
 
 ```
