@@ -1,3 +1,5 @@
+# Funções auxiliares usadas pelo transmissor e pelo receptor.
+# # Converte o texto em bits: 8 bits por caractere.
 def texto_para_bits(texto: str) -> str:
     #Converte uma string de texto em uma string de bits (codificação ASCII/UTF-8).
 

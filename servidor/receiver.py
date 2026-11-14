@@ -29,6 +29,7 @@ from camada_fisica.demodulacao import (
 )
 from camada_fisica.ruido import adicionar_ruido_gaussiano
 
+# Endereço e porta do servidor TCP (o transmissor usa os mesmos valores).
 HOST = '127.0.0.1'
 PORT = 5000
 
@@ -46,14 +47,17 @@ class Receiver:
     
     # Servidor TCP
     def _executar_servidor(self):
+        # Cria o socket TCP do servidor e permite reutilizar a porta ao reiniciar.
         servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         servidor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
         try:
+            # Liga o servidor à porta e fica aguardando conexões do transmissor.
             servidor.bind((HOST, PORT))
             servidor.listen(5)
             self._log(f'Servidor aguardando conexões em {HOST}:{PORT}…\n')
 
+            # Laço principal: aceita uma conexão por transmissão e processa a mensagem recebida.
             transmissao = 0
             while True:
                 conn, addr = servidor.accept()
@@ -81,6 +85,7 @@ class Receiver:
         # Recebe payload completo (sinais LIMPOS vindos do transmissor)
         payload = json.loads(receber_exato(conn, tamanho).decode('utf-8'))
 
+        # Lê do pacote os protocolos escolhidos no cliente, os sinais limpos e os tamanhos (n_dados, n_bits).
         mod_digital = payload.get('modulacao_digital', 'NRZ-Polar')
         modulacao   = payload.get('modulacao', 'ASK')
         enquadr     = payload.get('enquadramento', 'Contagem de Caracteres')
@@ -94,6 +99,7 @@ class Receiver:
         self._esperada = payload.get('mensagem', '')   # só para exibição/comparação no simulador
         n_bits      = payload.get('n_bits')   # nº de bits úteis (sem o padding do último símbolo)
 
+        # Mostra no log os parâmetros da transmissão.
         self._log(f'Modulação digital       : {mod_digital}\n')
         self._log(f'Modulação por portadora : {modulacao}\n')
         self._log(f'Enquadramento           : {enquadr}\n')
@@ -104,6 +110,7 @@ class Receiver:
         sinal_portadora = adicionar_ruido_gaussiano(portadora_limpa, media, sigma)
         self._log(f'Ruído AWGN aplicado     : μ = {media:.2f} V, σ = {sigma:.2f} V\n\n')
 
+        # Cria a resposta (um resultado por caminho físico) que será devolvida ao cliente.
         resposta = {
             'banda_base': self._novo_caminho(sinal_digital),
             'portadora' : self._novo_caminho(sinal_portadora, tempo),
@@ -122,6 +129,7 @@ class Receiver:
                 n_bits, n_dados, enquadr, deteccao)
 
         finally:
+            # Mesmo que um caminho falhe, o cliente sempre recebe a resposta.
             self._enviar_resposta(conn, resposta)
 
     @staticmethod
@@ -227,6 +235,7 @@ class Receiver:
 
     def _enviar_resposta(self, conn: socket.socket, resposta: dict):
         # Devolve ao transmissor, para cada caminho, o sinal ruidoso, os bits ruidosos e o texto decodificado.
+        # Serializa a resposta em JSON e envia com o tamanho (4 bytes) na frente.
         dados = json.dumps(resposta).encode('utf-8')
         conn.sendall(struct.pack('!I', len(dados)) + dados)
 

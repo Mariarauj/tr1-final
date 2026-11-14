@@ -19,18 +19,21 @@ try:
 except ImportError:
     from matplotlib.backends.backend_gtk3agg import FigureCanvasGTK3Agg as FigureCanvas
 
+# Configurações globais dos gráficos (sem LaTeX, tamanho da fonte e resolução).
 matplotlib.rcParams['text.usetex'] = False
 matplotlib.rcParams['font.size'] = 9
 matplotlib.rcParams['figure.dpi'] = 80 
 
 AMOSTRAS_POR_BIT = 100   # amostras por bit nos sinais banda-base (1 bit = 1 s no eixo do tempo)
 
+# Janela do transmissor: entrada da mensagem, escolha dos protocolos e do ruído, pipeline e gráficos.
 class ClienteUI(Gtk.Window):
     def __init__(self):
         super().__init__(title='Simulador TR1 — Transmissor')
         self.set_border_width(12)
         self.set_default_size(980, 900)
 
+        # Cria o transmissor, que guarda os protocolos escolhidos e executa a cadeia de codificação.
         self.transmitter = Transmitter()
 
         # HeaderBar
@@ -60,6 +63,7 @@ class ClienteUI(Gtk.Window):
         self.add(raiz)
 
         # Entrada de texto
+        # Caixa onde o usuário digita a mensagem.
         frame_entrada = Gtk.Frame(label=' Mensagem ')
         raiz.pack_start(frame_entrada, False, False, 0)
         self.entrada = Gtk.Entry()
@@ -71,6 +75,7 @@ class ClienteUI(Gtk.Window):
         frame_entrada.add(self.entrada)
 
         # Configurações dos protocolos (4 combos)
+        # Quadro com as listas de escolha dos protocolos e do nível de ruído.
         frame_cfg = Gtk.Frame(label=' Configuração dos Protocolos ')
         raiz.pack_start(frame_cfg, False, False, 0)
         grade = Gtk.Grid(column_spacing=12, row_spacing=6)
@@ -91,6 +96,7 @@ class ClienteUI(Gtk.Window):
             grade.attach(lbl, col, 0, 1, 1)
 
         # Linha 1 — combos
+        # Define as opções de cada lista de escolha (a primeira opção é a padrão).
         self.combo_mod_digital = self._combo(
             ['NRZ-Polar', 'Manchester', 'Bipolar'])
         
@@ -103,8 +109,10 @@ class ClienteUI(Gtk.Window):
         self.combo_deteccao = self._combo(
             ['Paridade Par', 'Checksum', 'CRC', 'Entrelaçamento de Bits'])
         
+        # Seleciona o CRC como detecção padrão.
         self.combo_deteccao.set_active(2)   # CRC como padrão
 
+        # Coloca as quatro listas na linha 1 da grade, uma por coluna.
         for col, combo in enumerate([
             self.combo_mod_digital,
             self.combo_mod_portadora,
@@ -120,6 +128,7 @@ class ClienteUI(Gtk.Window):
         lbl_ruido.set_xalign(0.0)
         grade.attach(lbl_ruido, 0, 2, 1, 1)
 
+        # Lista de níveis de ruído (Baixo, Médio, Alto), montada a partir de NIVEIS_RUIDO.
         self.combo_ruido = Gtk.ComboBoxText()
         for nivel, (_, sigma) in NIVEIS_RUIDO.items():
             self.combo_ruido.append(nivel, f'{nivel} (σ = {sigma:g} V)')
@@ -136,6 +145,7 @@ class ClienteUI(Gtk.Window):
         frame_saida = Gtk.Frame(label=' Pipeline de Codificação ')
         raiz.pack_start(frame_saida, False, False, 0)
 
+        # Área com rolagem que mostra as etapas do pipeline de codificação.
         scroll_saida = Gtk.ScrolledWindow()
         scroll_saida.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scroll_saida.set_min_content_height(140)
@@ -186,10 +196,12 @@ class ClienteUI(Gtk.Window):
         self.scroll_graf2.set_vexpand(True)
         box_graficos.pack_start(self.scroll_graf2, True, True, 0)
 
+        # Os canvas dos gráficos são criados a cada transmissão.
         self.canvas1 = None
         self.canvas2 = None
 
 
+    # Cria uma lista de escolha com as opções informadas.
     def _combo(self, opcoes: list[str]) -> Gtk.ComboBoxText:
         cb = Gtk.ComboBoxText()
         for op in opcoes:
@@ -198,6 +210,7 @@ class ClienteUI(Gtk.Window):
         cb.set_active(0)
         return cb
 
+    # Mostra uma janela de aviso com a mensagem informada.
     def _aviso(self, msg: str):
         dlg = Gtk.MessageDialog(
             parent=self,
@@ -208,6 +221,7 @@ class ClienteUI(Gtk.Window):
         dlg.run()
         dlg.destroy()
 
+    # Executado ao clicar em 'Transmitir': lê as escolhas, codifica, envia ao servidor e atualiza a tela.
     def _ao_transmitir(self, _widget):
         texto = self.entrada.get_text().strip()
 
@@ -231,6 +245,7 @@ class ClienteUI(Gtk.Window):
             return
 
         # Envia o sinal limpo ao meio de comunicação (servidor), que soma o AWGN e responde
+        # Envia os sinais ao servidor; se ele estiver fora do ar, o aviso é exibido.
         resposta = None
         try:
             resposta = self.transmitter.enviar(resultado)
@@ -239,6 +254,7 @@ class ClienteUI(Gtk.Window):
             self._aviso(str(exc))
 
         # Exibe etapas do pipeline
+        # Corta as sequências de bits longas para caber na tela.
         def resumo(s, max_len=80):
             return s[:max_len] + ('…' if len(s) > max_len else '')
 
@@ -265,6 +281,7 @@ class ClienteUI(Gtk.Window):
         # Atualiza gráficos
         self._atualizar_graficos(exibir, resultado)
 
+    # Desenha o sinal digital e o de portadora (ruidoso sobre o original em cinza).
     def _atualizar_graficos(self, resultado: dict, limpo: dict):
         # resultado: sinais exibidos (com ruído, se houver); limpo: sinais originais, desenhados em cinza ao fundo
         mod_digital   = self.transmitter.mod_digital
@@ -274,6 +291,7 @@ class ClienteUI(Gtk.Window):
         self.lbl_titulo_digital.set_markup(f'<b>Digital — {mod_digital}</b>')
         self.lbl_titulo_portadora.set_markup(f'<b>Portadora — {mod_portadora}</b>')
 
+        # Limite de pontos desenhados por gráfico (reduz as amostras para a tela não travar).
         MAX_PTS = 1000
 
         # Gráfico 1: sinal digital
@@ -289,6 +307,7 @@ class ClienteUI(Gtk.Window):
             limpo_d = limpo_d[idx]
             tempo_d = tempo_d[idx]
 
+        # Cria a figura, os eixos e as legendas do gráfico digital.
         fig1 = Figure(figsize=(12, 2.5), dpi=80)
         ax1  = fig1.add_subplot(1, 1, 1)
         fig1.subplots_adjust(top=0.95, bottom=0.22, left=0.07, right=0.99)
@@ -303,6 +322,7 @@ class ClienteUI(Gtk.Window):
         
         ax1.grid(True, alpha=0.3)
 
+        # Insere o gráfico digital na janela.
         self.canvas1 = FigureCanvas(fig1)
         self.canvas1.set_size_request(900, 200)
         self.scroll_graf1.add(self.canvas1)
@@ -320,6 +340,7 @@ class ClienteUI(Gtk.Window):
             sinal_p = sinal_p[idx]
             limpo_p = limpo_p[idx]
 
+        # Cria a figura, os eixos e as legendas do gráfico de portadora.
         fig2 = Figure(figsize=(12, 2.5), dpi=80)
         ax2  = fig2.add_subplot(1, 1, 1)
         fig2.subplots_adjust(top=0.95, bottom=0.22, left=0.07, right=0.99)
@@ -330,6 +351,7 @@ class ClienteUI(Gtk.Window):
         ax2.plot(tempo, sinal_p, color='darkorange', linewidth=0.8)
         ax2.grid(True, alpha=0.3)
 
+        # Insere o gráfico de portadora na janela.
         self.canvas2 = FigureCanvas(fig2)
         self.canvas2.set_size_request(900, 200)
         self.scroll_graf2.add(self.canvas2)

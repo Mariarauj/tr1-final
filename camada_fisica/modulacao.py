@@ -60,35 +60,40 @@ def ask(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
     '''
     Os bits 1 serão definidos pela presença de sinal e os bits 0 pela ausencia dele.
     '''
-    A = 1
-    f = 2     
-    amostras_por_bit = 100
-    tempo_total = []
-    sinal = []
+    A = 1 #define a amplitude da portadora.
+    f = 2 #define a frequência da portadora (2 ciclos por bit).
+    amostras_por_bit = 100 #define 100 amostras por bit.
+    tempo_total = [] #lista vazia para armazenar o eixo do tempo.
+    sinal = [] #lista vazia para armazenar o sinal modulado.
     for i, bit in enumerate(dados):
-        t = np.linspace(i, i + 1, amostras_por_bit, endpoint=False)
+        t = np.linspace(i, i + 1, amostras_por_bit, endpoint=False) #instantes de tempo do bit i (cada bit dura 1 s).
         if bit == 1:
-            sinal.extend(A * np.sin(2 * np.pi * f * t))
+            sinal.extend(A * np.sin(2 * np.pi * f * t)) #para bit 1, transmite a portadora senoidal.
         else:
-            sinal.extend(np.zeros(amostras_por_bit))
+            sinal.extend(np.zeros(amostras_por_bit)) #para bit 0, não transmite nada (sinal = 0).
         tempo_total.extend(t)
-    return np.array(tempo_total), np.array(sinal)
+    return np.array(tempo_total), np.array(sinal) #retorna o tempo e o sinal modulado.
 
 
 def fsk(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
-    A = 1
-    f1, f0 = 2, 1
-    amostras_por_bit = 100
-    tempo_total = []
-    sinal = []
+    '''
+    Os bits 1 serão definidos por uma frequência (f1) e os bits 0 por outra frequência (f0).
+    '''
+    A = 1 #define a amplitude da portadora.
+    f1, f0 = 2, 1 #define as frequências: 2 Hz para o bit 1 e 1 Hz para o bit 0.
+    amostras_por_bit = 100 #define 100 amostras por bit.
+    tempo_total = [] #lista vazia para armazenar o eixo do tempo.
+    sinal = [] #lista vazia para armazenar o sinal modulado.
     for i, bit in enumerate(dados):
-        t = np.linspace(i, i + 1, amostras_por_bit, endpoint=False)
-        freq = f1 if bit == 1 else f0
-        sinal.extend(A * np.sin(2 * np.pi * freq * t))
+        t = np.linspace(i, i + 1, amostras_por_bit, endpoint=False) #instantes de tempo do bit i (cada bit dura 1 s).
+        freq = f1 if bit == 1 else f0 #escolhe a frequência de acordo com o bit.
+        sinal.extend(A * np.sin(2 * np.pi * freq * t)) #transmite a senoide na frequência escolhida.
         tempo_total.extend(t)
-    return np.array(tempo_total), np.array(sinal)
+    return np.array(tempo_total), np.array(sinal) #retorna o tempo e o sinal modulado.
 
 # Modulações por constelação (8PSK e 32-QAM) -------------------------------------------------
+# Cada grupo de bits (símbolo) é associado a um ponto (I, Q) da constelação e transmitido como
+# I·cos(2πft) - Q·sen(2πft), durante 0.1 s.
 
 FS              = 1000   # taxa de amostragem (Hz)
 F_PORTADORA     = 10     # frequência da portadora (Hz): 1 ciclo completo por símbolo
@@ -110,18 +115,18 @@ _CONSTELACAO_32QAM = {f'{idx:05b}': ponto for idx, ponto in enumerate(_PONTOS_32
 
 def _modular_constelacao(dados: list[int], bits_por_simbolo: int, constelacao: dict) -> tuple[np.ndarray, np.ndarray]:
     # Agrupa os bits em símbolos e transmite cada um como I·cos(2πft) - Q·sen(2πft).
-    bits_str = ''.join(map(str, dados))
+    bits_str = ''.join(map(str, dados)) #transforma a lista de bits em uma string.
     bits_str += '0' * (-len(bits_str) % bits_por_simbolo)   # padding até completar o último símbolo
 
-    simbolos = [bits_str[i:i + bits_por_simbolo] for i in range(0, len(bits_str), bits_por_simbolo)]
-    amostras_por_simbolo = int(DURACAO_SIMBOLO * FS)
-    t = np.arange(len(simbolos) * amostras_por_simbolo) / FS
-    sinal = np.zeros_like(t)
+    simbolos = [bits_str[i:i + bits_por_simbolo] for i in range(0, len(bits_str), bits_por_simbolo)] #separa os bits em símbolos.
+    amostras_por_simbolo = int(DURACAO_SIMBOLO * FS) #quantidade de amostras de um símbolo (0.1 s x 1000 Hz = 100).
+    t = np.arange(len(simbolos) * amostras_por_simbolo) / FS #eixo do tempo de todo o sinal.
+    sinal = np.zeros_like(t) #sinal inicial (zeros), preenchido símbolo a símbolo.
 
     for i, s in enumerate(simbolos):
-        I, Q = constelacao[s]
-        inicio = i * amostras_por_simbolo
-        fim = inicio + amostras_por_simbolo
+        I, Q = constelacao[s] #ponto (I, Q) da constelação associado ao símbolo.
+        inicio = i * amostras_por_simbolo #primeira amostra do símbolo.
+        fim = inicio + amostras_por_simbolo #última amostra do símbolo.
         sinal[inicio:fim] = (
             I * np.cos(2 * np.pi * F_PORTADORA * t[inicio:fim])
             - Q * np.sin(2 * np.pi * F_PORTADORA * t[inicio:fim])
@@ -130,10 +135,14 @@ def _modular_constelacao(dados: list[int], bits_por_simbolo: int, constelacao: d
 
 
 def psk8(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
-    # 8PSK: 3 bits por símbolo.
+    '''
+    8PSK: 3 bits por símbolo (8 fases com amplitude 1).
+    '''
     return _modular_constelacao(dados, 3, _CONSTELACAO_8PSK)
 
 
 def qam32(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
-    # 32-QAM: 5 bits por símbolo.
+    '''
+    32-QAM: 5 bits por símbolo (32 combinações de amplitude e fase).
+    '''
     return _modular_constelacao(dados, 5, _CONSTELACAO_32QAM)

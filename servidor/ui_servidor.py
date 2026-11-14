@@ -11,6 +11,7 @@ from gi.repository import Gtk, Gdk, Pango, GLib # type: ignore
 from servidor.receiver import Receiver
 
 
+# Janela do receptor: mostra um terminal de log com o que o servidor recebe e decodifica.
 class ServidorUI(Gtk.Window):
     def __init__(self):
         super().__init__(title='Simulador TR1 — Receptor')
@@ -39,6 +40,7 @@ class ServidorUI(Gtk.Window):
         self.add(vbox)
 
         # Área de texto (terminal de log)
+        # Terminal de log: área de texto só de leitura, com fonte monoespaçada.
         self.text_view = Gtk.TextView()
         self.text_view.set_editable(False)
         self.text_view.set_wrap_mode(Gtk.WrapMode.WORD)
@@ -47,6 +49,7 @@ class ServidorUI(Gtk.Window):
         self.text_view.modify_font(Pango.FontDescription('Monospace 11'))
 
         # Fundo cinza-claro via CSS
+        # Pinta o fundo do terminal de cinza claro.
         css = b'textview, textview text { background: #f4f4f4; }'
         provider = Gtk.CssProvider()
         provider.load_from_data(css)
@@ -58,6 +61,7 @@ class ServidorUI(Gtk.Window):
 
         self.buffer = self.text_view.get_buffer()
 
+        # Área com rolagem que contém o terminal.
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scroll.set_vexpand(True)
@@ -70,9 +74,11 @@ class ServidorUI(Gtk.Window):
         self.receiver.iniciar()
         self._adicionar_texto('✅ Servidor iniciado com sucesso!\n')
 
+    # Chamada pelo receptor (em outra thread): agenda a escrita no log na thread da interface.
     def _atualizar_ui(self, texto: str):
         GLib.idle_add(self._adicionar_texto, texto)
 
+    # Escreve o texto no final do log e rola a tela até ele.
     def _adicionar_texto(self, texto: str):
         marca = self.buffer.create_mark(None, self.buffer.get_end_iter(), False)
         self.buffer.insert(self.buffer.get_end_iter(), texto)

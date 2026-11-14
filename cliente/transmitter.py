@@ -28,6 +28,7 @@ from camada_fisica.modulacao import (
     ask, fsk, psk8, qam32,
 )
 
+# Endereço e porta do servidor (meio de comunicação) para onde os sinais são enviados.
 HOST = '127.0.0.1'
 PORT = 5000
 
@@ -45,6 +46,7 @@ class Transmitter:
         media_ruido: float = 0.0,
         sigma_ruido: float = 0.05,
     ):
+        # Guarda os protocolos e o nível de ruído escolhidos (a interface altera esses valores antes de transmitir).
         self.mod_digital   = mod_digital
         self.mod_portadora = mod_portadora
         self.enquadramento = enquadramento
@@ -114,17 +116,20 @@ class Transmitter:
 
     # Pipeline completo
     def processar(self, texto: str) -> dict: 
+        # Pipeline de codificação: texto -> bits -> enquadramento -> detecção de erros -> Hamming.
         bits_brutos     = self.codificar_texto(texto)
         bits_enquadrado = self.aplicar_enquadramento(bits_brutos)   # 1º: quadros (flags, contagem...)
         bits_deteccao   = self.aplicar_deteccao(bits_enquadrado)    # 2º: detecção escolhida, sobre o quadro
         bits_hamming    = self.aplicar_hamming(bits_deteccao)       # 3º: Hamming por bloco de 8 bits (flags inclusive)
 
+        # Converte a string de bits em lista de inteiros, formato esperado pelos moduladores.
         lista_bits = [int(b) for b in bits_hamming]
 
         # Modulação dos sinais (limpos: o ruído é somado depois, pelo meio de comunicação)
         sinal_digital          = self.modular_digital(lista_bits)
         tempo, sinal_portadora = self.modular_portadora(lista_bits)
 
+        # Devolve todas as etapas e os sinais modulados (limpos) para exibição e envio.
         return {
             'texto'          : texto,
             'bits_brutos'    : bits_brutos,
@@ -141,8 +146,10 @@ class Transmitter:
         # Envia os sinais limpos (banda-base e portadora) ao meio de comunicação (servidor) e
         # devolve a resposta dele. Para cada caminho ('banda_base' e 'portadora'): sinal ruidoso,
         # bits ruidosos (antes de qualquer tratamento) e texto recebido.
+        # Separa o tempo e o sinal da portadora.
         t, sinal = resultado['sinal_portadora']
 
+        # Monta o pacote: protocolos escolhidos, nível de ruído, tamanhos úteis e os sinais limpos.
         payload = {
             'modulacao_digital': self.mod_digital,
             'modulacao'    : self.mod_portadora,
@@ -158,9 +165,11 @@ class Transmitter:
             'sinal'        : sinal.tolist() if hasattr(sinal, 'tolist') else list(sinal),
         }
 
+        # Serializa o pacote em JSON; o tamanho (4 bytes) vai na frente para o receptor saber quanto ler.
         dados = json.dumps(payload).encode('utf-8')
         tamanho = struct.pack('!I', len(dados))
 
+        # Conecta ao servidor, envia o pacote e aguarda a resposta (sinais ruidosos, bits e texto recebido).
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                 sock.settimeout(10)
