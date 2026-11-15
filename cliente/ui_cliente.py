@@ -13,6 +13,8 @@ import numpy as np #analise de dados
 from matplotlib.figure import Figure
 from cliente.transmitter import Transmitter
 from camada_fisica.ruido import NIVEIS_RUIDO
+from camada_enlace.deteccao_erros import TAMANHOS_EDC, EDC_PADRAO
+from camada_enlace.enquadramento import TAMANHO_QUADRO_PADRAO, TAMANHO_QUADRO_MAX
 try:
     # Canvas Cairo: desenha os textos dos eixos com o próprio Cairo/GTK
     from matplotlib.backends.backend_gtk3cairo import FigureCanvasGTK3Cairo as FigureCanvas
@@ -74,7 +76,7 @@ class ClienteUI(Gtk.Window):
         self.entrada.set_margin_end(6)
         frame_entrada.add(self.entrada)
 
-        # Configurações dos protocolos (4 combos)
+        # Configurações dos protocolos (4 combos, o tamanho do quadro e do EDC, e o ruído)
         # Quadro com as listas de escolha dos protocolos e do nível de ruído.
         frame_cfg = Gtk.Frame(label=' Configuração dos Protocolos ')
         raiz.pack_start(frame_cfg, False, False, 0)
@@ -122,7 +124,30 @@ class ClienteUI(Gtk.Window):
             combo.set_hexpand(True)
             grade.attach(combo, col, 1, 1, 1)
 
-        # Linha 2 — rótulo do ruído do canal (AWGN); linha 3 — nível de ruído
+        # Linha 2 — rótulos; linha 3 — campos: nível de ruído (AWGN), tamanho máximo do quadro
+        # (sob o enquadramento) e tamanho do EDC (sob a detecção)
+        lbl_quadro = Gtk.Label()
+        lbl_quadro.set_markup('<b>Tamanho máx. do quadro (bytes)</b>')
+        lbl_quadro.set_xalign(0.0)
+        grade.attach(lbl_quadro, 2, 2, 1, 1)
+
+        self.spin_quadro = Gtk.SpinButton.new_with_range(1, TAMANHO_QUADRO_MAX, 1)   # 1 a 255 (cabeçalho de 1 byte)
+        self.spin_quadro.set_value(TAMANHO_QUADRO_PADRAO)
+        self.spin_quadro.set_numeric(True)
+        self.spin_quadro.set_hexpand(True)
+        grade.attach(self.spin_quadro, 2, 3, 1, 1)
+
+        lbl_edc = Gtk.Label()
+        lbl_edc.set_markup('<b>Tamanho do EDC (bits)</b>')
+        lbl_edc.set_xalign(0.0)
+        grade.attach(lbl_edc, 3, 2, 1, 1)
+
+        self.combo_edc = Gtk.ComboBoxText()   # as opções dependem da detecção escolhida
+        self.combo_edc.set_hexpand(True)
+        grade.attach(self.combo_edc, 3, 3, 1, 1)
+        self.combo_deteccao.connect('changed', self._ao_mudar_deteccao)
+        self._ao_mudar_deteccao(self.combo_deteccao)   # preenche as opções para a detecção inicial
+
         lbl_ruido = Gtk.Label()
         lbl_ruido.set_markup('<b>Nível de Ruído (AWGN)</b>')
         lbl_ruido.set_xalign(0.0)
@@ -210,6 +235,16 @@ class ClienteUI(Gtk.Window):
         cb.set_active(0)
         return cb
 
+    # Atualiza as opções de tamanho do EDC conforme a detecção escolhida (a paridade só tem 1 bit).
+    def _ao_mudar_deteccao(self, combo):
+        deteccao = combo.get_active_text()
+        opcoes = TAMANHOS_EDC.get(deteccao, [])
+        self.combo_edc.remove_all()
+        for op in opcoes:
+            self.combo_edc.append(str(op), str(op))
+        self.combo_edc.set_active(opcoes.index(EDC_PADRAO[deteccao]) if opcoes else -1)   # seleciona o padrão
+        self.combo_edc.set_sensitive(len(opcoes) > 1)   # com uma única opção não há o que escolher
+
     # Mostra uma janela de aviso com a mensagem informada.
     def _aviso(self, msg: str):
         dlg = Gtk.MessageDialog(
@@ -234,6 +269,9 @@ class ClienteUI(Gtk.Window):
         self.transmitter.mod_portadora = self.combo_mod_portadora.get_active_text()
         self.transmitter.enquadramento = self.combo_enquadramento.get_active_text()
         self.transmitter.deteccao      = self.combo_deteccao.get_active_text()
+        self.spin_quadro.update()   # confirma o valor digitado (sem precisar de Enter) antes de lê-lo
+        self.transmitter.tamanho_quadro = self.spin_quadro.get_value_as_int()
+        self.transmitter.tamanho_edc    = int(self.combo_edc.get_active_text())
         self.transmitter.media_ruido, self.transmitter.sigma_ruido = (
             NIVEIS_RUIDO[self.combo_ruido.get_active_id()])
 

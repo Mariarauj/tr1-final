@@ -5,11 +5,40 @@ Implementa:
   3. CRC
   4. Entrelaçamento de bits (paridade por coluna)
 
-O transmissor recebe uma string de bits e devolve os mesmos bits com o código de verificação anexado.
+O transmissor recebe uma string de bits e devolve os mesmos bits com o código de verificação (EDC) anexado.
 O receptor recebe os bits com o código e devolve (valido, dados): se a integridade foi confirmada
 e os bits originais, já sem o código.
 
+O tamanho do EDC (em bits) é configurável, dentro das opções de cada protocolo:
+  - Paridade par : 1 bit (fixo, é a própria definição do código)
+  - Checksum     : 8, 16 ou 32 bits (tamanho da palavra somada = tamanho do resultado)
+  - CRC          : 32 bits (fixo: o enunciado define o polinômio gerador CRC-32 do padrão IEEE 802)
+  - Entrelaçamento: 4, 8, 16 ou 32 bits (um bit de paridade por coluna = quantidade de colunas)
+
 '''
+
+# Tamanhos de EDC aceitos por cada detecção (o padrão de cada uma está em EDC_PADRAO).
+TAMANHOS_EDC = {
+    'Paridade Par'          : [1],
+    'Checksum'              : [8, 16, 32],
+    'CRC'                   : [32],
+    'Entrelaçamento de Bits': [4, 8, 16, 32],
+}
+
+# Tamanho de EDC padrão de cada detecção.
+EDC_PADRAO = {
+    'Paridade Par'          : 1,
+    'Checksum'              : 8,
+    'CRC'                   : 32,
+    'Entrelaçamento de Bits': 8,
+}
+
+
+def edc_valido(deteccao: str, tamanho_edc: int) -> bool:
+    '''
+    Confere se 'tamanho_edc' é uma opção válida para a detecção escolhida.
+    '''
+    return tamanho_edc in TAMANHOS_EDC.get(deteccao, [])
 
 # 1. Bit de paridade par -------------------------------------------------------------------
 
@@ -32,37 +61,38 @@ def receptor_paridade(bits: str) -> tuple[bool, str]:
 
 
 
-# 2. Checksum (palavras de 8 bits, soma em complemento de 1) ------------------------------
+# 2. Checksum (palavras de 'tam' bits, soma em complemento de 1) --------------------------
 
-def _checksum_calcular(bits: str) -> str:
+def _checksum_calcular(bits: str, tam: int = 8) -> str:
     '''
-    Soma todas as palavras de 8 bits (devolvendo o 'vai-um' para a soma) e inverte o resultado.
+    Soma todas as palavras de 'tam' bits (devolvendo o 'vai-um' para a soma) e inverte o resultado.
     '''
-    padding = (8 - len(bits) % 8) % 8 #zeros necessários para completar a última palavra de 8 bits.
+    mascara = (1 << tam) - 1 #tam bits em 1: isola uma palavra.
+    padding = (tam - len(bits) % tam) % tam #zeros necessários para completar a última palavra.
     bits_pad = bits + '0' * padding #o padding existe só dentro do cálculo; ele não é transmitido.
 
     soma = 0 #acumulador da soma das palavras.
-    for i in range(0, len(bits_pad), 8):
-        soma += int(bits_pad[i:i+8], 2) #soma a palavra de 8 bits atual.
-        soma = (soma & 0xFF) + (soma >> 8)      #se passou de 8 bits, o 'vai-um' volta para a soma.
+    for i in range(0, len(bits_pad), tam):
+        soma += int(bits_pad[i:i+tam], 2) #soma a palavra atual.
+        soma = (soma & mascara) + (soma >> tam)      #se passou de 'tam' bits, o 'vai-um' volta para a soma.
 
-    return format(~soma & 0xFF, '08b') #complemento de 1 (inverte os bits), escrito em 8 bits.
+    return format(~soma & mascara, f'0{tam}b') #complemento de 1 (inverte os bits), escrito em 'tam' bits.
 
 
-def transmissor_checksum(bits: str) -> str:
+def transmissor_checksum(bits: str, tam: int = 8) -> str:
     '''
-    Acrescenta o checksum de 8 bits ao final da string de bits.
+    Acrescenta o checksum de 'tam' bits ao final da string de bits.
     '''
-    return bits + _checksum_calcular(bits)
+    return bits + _checksum_calcular(bits, tam)
 
 
-def receptor_checksum(bits: str) -> tuple[bool, str]:
+def receptor_checksum(bits: str, tam: int = 8) -> tuple[bool, str]:
     '''
-    Recalcula o checksum dos dados e compara com os 8 bits recebidos.
+    Recalcula o checksum dos dados e compara com os 'tam' bits recebidos.
     '''
-    dado = bits[:-8] #dados, sem o checksum.
-    checksum_recebido = bits[-8:] #os 8 últimos bits são o checksum enviado.
-    checksum_calculado = _checksum_calcular(dado) #checksum calculado sobre os dados recebidos.
+    dado = bits[:-tam] #dados, sem o checksum.
+    checksum_recebido = bits[-tam:] #os 'tam' últimos bits são o checksum enviado.
+    checksum_calculado = _checksum_calcular(dado, tam) #checksum calculado sobre os dados recebidos.
     return (checksum_recebido == checksum_calculado, dado)
 
 
@@ -111,49 +141,50 @@ def receptor_crc(bits: str) -> tuple[bool, str]:
 
 
 # 4. Entrelaçamento de bits (paridade por coluna) ------------------------------------------
-# Os bits formam uma matriz de 8 COLUNAS (uma linha por byte). Em vez de enviar linha por
-# linha, o transmissor envia coluna por coluna (de cima para baixo), e ao fim de cada coluna
-# vai o seu bit de paridade par. Uma rajada de erros fica espalhada em colunas diferentes.
-# Se o número de bits não for múltiplo de 8, a última linha fica incompleta (só existem as
+# Os bits formam uma matriz de 'colunas' COLUNAS (uma linha por 'colunas' bits; com 8 colunas, um byte
+# por linha). Em vez de enviar linha por linha, o transmissor envia coluna por coluna (de cima para
+# baixo), e ao fim de cada coluna vai o seu bit de paridade par. Uma rajada de erros fica espalhada
+# em colunas diferentes. O EDC tem 'colunas' bits (um por coluna).
+# Se o número de bits não for múltiplo de 'colunas', a última linha fica incompleta (só existem as
 # primeiras k células): não há padding, pois o receptor deduz o formato pelo tamanho total
-# (tamanho = dados + 8 bits de paridade).
+# (tamanho = dados + 'colunas' bits de paridade).
 
-def _colunas(bits: str) -> list[str]:
+def _colunas(bits: str, colunas: int = 8) -> list[str]:
     '''
-    Separa os bits em 8 colunas: a coluna c contém os bits nas posições c, c+8, c+16...
+    Separa os bits em 'colunas' colunas: a coluna c contém os bits nas posições c, c+colunas, c+2*colunas...
     '''
-    return [bits[c::8] for c in range(8)]
+    return [bits[c::colunas] for c in range(colunas)]
 
 
-def transmissor_entrelacamento(bits: str) -> str:
+def transmissor_entrelacamento(bits: str, colunas: int = 8) -> str:
     '''
     Envia a matriz coluna por coluna, com a paridade par de cada coluna ao final dela.
     '''
     saida = [] #colunas já com a paridade.
-    for coluna in _colunas(bits):
+    for coluna in _colunas(bits, colunas):
         paridade = '1' if coluna.count('1') % 2 else '0' #paridade par da coluna.
         saida.append(coluna + paridade) #coluna = bits da coluna + bit de paridade.
     return ''.join(saida)
 
 
-def receptor_entrelacamento(bits: str) -> tuple[bool, str]:
+def receptor_entrelacamento(bits: str, colunas: int = 8) -> tuple[bool, str]:
     '''
     Separa as colunas, confere a paridade de cada uma e reconstrói a ordem original dos bits.
     '''
-    n_dados = len(bits) - 8 #total = dados + 8 bits de paridade (um por coluna).
+    n_dados = len(bits) - colunas #total = dados + 'colunas' bits de paridade (um por coluna).
     if n_dados < 0: #não há bits suficientes nem para a paridade.
         return (False, '')
 
-    linhas, resto = divmod(n_dados, 8)    #as 'resto' primeiras colunas têm uma célula a mais (última linha incompleta).
-    colunas, valido, pos = [], True, 0 #colunas lidas, resultado da verificação e posição atual na string.
-    for c in range(8):
+    linhas, resto = divmod(n_dados, colunas)    #as 'resto' primeiras colunas têm uma célula a mais (última linha incompleta).
+    lista, valido, pos = [], True, 0 #colunas lidas, resultado da verificação e posição atual na string.
+    for c in range(colunas):
         tam = linhas + (1 if c < resto else 0) #quantidade de bits de dados desta coluna.
         coluna, paridade = bits[pos:pos + tam], bits[pos + tam] #bits da coluna e a paridade que veio logo depois.
         pos += tam + 1 #avança para a próxima coluna.
-        colunas.append(coluna)
+        lista.append(coluna)
         if ('1' if coluna.count('1') % 2 else '0') != paridade: #paridade recalculada diferente da recebida.
             valido = False
 
-    # reconstrói a ordem original: bit i está na coluna i % 8, posição i // 8
-    dado = ''.join(colunas[i % 8][i // 8] for i in range(n_dados))
+    # reconstrói a ordem original: bit i está na coluna i % colunas, posição i // colunas
+    dado = ''.join(lista[i % colunas][i // colunas] for i in range(n_dados))
     return (valido, dado)

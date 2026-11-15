@@ -8,7 +8,7 @@ estimado (lista de 0s e 1s). Cada demodulador é o inverso do modulador correspo
 '''
 import numpy as np #facilita operações matemáticas e manipulação de sinais.
 from camada_fisica.modulacao import (
-    FS, F_PORTADORA, DURACAO_SIMBOLO, _CONSTELACAO_8PSK, _CONSTELACAO_32QAM,
+    FS, F_PORTADORA, DURACAO_BIT, _CONSTELACAO_8PSK, _CONSTELACAO_32QAM,
 )
 
 # Demodulação digital (Banda base) --------------------------------------------------------
@@ -106,7 +106,8 @@ def _demodular_constelacao(tempo: np.ndarray, sinal: np.ndarray, constelacao: di
     '''
     Correlaciona cada símbolo com cos/sen para recuperar (I, Q) e decide pelo ponto mais próximo.
     '''
-    amostras_por_simbolo = int(DURACAO_SIMBOLO * FS) #quantidade de amostras de um símbolo.
+    bits_por_simbolo = len(next(iter(constelacao))) #quantidade de bits de cada símbolo (3 no 8PSK e 5 no 32-QAM).
+    amostras_por_simbolo = int(bits_por_simbolo * DURACAO_BIT * FS) #quantidade de amostras de um símbolo (100 por bit).
     bits = []
 
     for i in range(0, len(sinal) - amostras_por_simbolo + 1, amostras_por_simbolo):

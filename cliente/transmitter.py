@@ -17,11 +17,13 @@ from camada_enlace.deteccao_erros import (
     transmissor_checksum,
     transmissor_crc,
     transmissor_entrelacamento,
+    EDC_PADRAO, TAMANHOS_EDC, edc_valido,
 )
 from camada_enlace.enquadramento import (
     transmissor_contagem,
     transmissor_insercao_bytes,
     transmissor_insercao_bits,
+    TAMANHO_QUADRO_PADRAO, TAMANHO_QUADRO_MAX, tamanho_quadro_valido,
 )
 from camada_fisica.modulacao import (
     nrz_polar, manchester, bipolar,
@@ -32,8 +34,6 @@ from camada_fisica.modulacao import (
 HOST = '127.0.0.1'
 PORT = 5000
 
-TAMANHO_QUADRO = 8  # tamanho do quadro, em bytes, usado nos enquadramentos
-
 
 class Transmitter:
     #Gerencia o pipeline de transmissão.
@@ -43,6 +43,8 @@ class Transmitter:
         mod_portadora: str = 'ASK',
         enquadramento: str = 'Contagem de Caracteres',
         deteccao: str = 'CRC',
+        tamanho_quadro: int = TAMANHO_QUADRO_PADRAO,
+        tamanho_edc: int | None = None,
         media_ruido: float = 0.0,
         sigma_ruido: float = 0.05,
     ):
@@ -51,6 +53,8 @@ class Transmitter:
         self.mod_portadora = mod_portadora
         self.enquadramento = enquadramento
         self.deteccao      = deteccao
+        self.tamanho_quadro = tamanho_quadro   # tamanho máximo do quadro, em bytes de dados
+        self.tamanho_edc    = tamanho_edc      # tamanho do EDC, em bits (None = padrão da detecção escolhida)
         self.media_ruido   = media_ruido
         self.sigma_ruido   = sigma_ruido
 
@@ -63,30 +67,43 @@ class Transmitter:
         # codifica para Hamming.
         return transmissor_hamming_blocos(bits)
 
+    def edc_efetivo(self) -> int:
+        # Tamanho do EDC (bits) que será usado: o escolhido pelo usuário ou, se nenhum foi escolhido, o padrão da detecção.
+        edc = EDC_PADRAO.get(self.deteccao, 32) if self.tamanho_edc is None else self.tamanho_edc
+        if not edc_valido(self.deteccao, edc):   # só valem os tamanhos previstos para cada detecção.
+            raise ValueError(f'Tamanho de EDC inválido para {self.deteccao}: {edc} bits '
+                             f'(opções: {TAMANHOS_EDC.get(self.deteccao)})')
+        return edc
+
     def aplicar_deteccao(self, bits: str) -> str:
-        # seleciona a detecção de erros
+        # seleciona a detecção de erros (o EDC tem o tamanho configurado)
+        edc = self.edc_efetivo()
         if self.deteccao == 'Paridade Par':
             return transmissor_paridade(bits)
         
         elif self.deteccao == 'Checksum':
-            return transmissor_checksum(bits)
+            return transmissor_checksum(bits, edc)
 
         elif self.deteccao == 'Entrelaçamento de Bits':
-            return transmissor_entrelacamento(bits)
+            return transmissor_entrelacamento(bits, edc)
         
         else:                                
-            return transmissor_crc(bits)
+            return transmissor_crc(bits, edc)
 
     def aplicar_enquadramento(self, bits: str) -> str: # Seleciona o enquadramento.
         # O texto é codificado em bytes (8 bits por caractere): não há padding a registrar.
+        if not tamanho_quadro_valido(self.tamanho_quadro):   # o tamanho máximo do quadro vale para os três protocolos.
+            raise ValueError(f'Tamanho de quadro inválido: {self.tamanho_quadro} '
+                             f'(use um inteiro de 1 a {TAMANHO_QUADRO_MAX} bytes)')
+
         if self.enquadramento == 'Contagem de Caracteres':
-            return transmissor_contagem(bits, TAMANHO_QUADRO)
+            return transmissor_contagem(bits, self.tamanho_quadro)
 
         elif self.enquadramento == 'Inserção de Bytes':
-            return transmissor_insercao_bytes(bits, TAMANHO_QUADRO)
+            return transmissor_insercao_bytes(bits, self.tamanho_quadro)
 
         else:                                   # Inserção de Bits
-            return transmissor_insercao_bits(bits)
+            return transmissor_insercao_bits(bits, self.tamanho_quadro)
 
     def modular_digital(self, bits: list[int]) -> np.ndarray:
         # Seleciona a modulação digital (banda-base).
@@ -155,6 +172,8 @@ class Transmitter:
             'modulacao'    : self.mod_portadora,
             'enquadramento': self.enquadramento,
             'deteccao'     : self.deteccao,
+            'tamanho_quadro': self.tamanho_quadro,   # só informativo para o receptor (os quadros se delimitam sozinhos)
+            'tamanho_edc'  : self.edc_efetivo(),     # o receptor precisa dele para separar o EDC dos dados
             'media_ruido'  : self.media_ruido,
             'sigma_ruido'  : self.sigma_ruido,
             'mensagem'     : resultado['texto'],   # exibida no servidor como "mensagem esperada"

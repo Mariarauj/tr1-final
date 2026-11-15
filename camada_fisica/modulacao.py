@@ -93,11 +93,12 @@ def fsk(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
 
 # Modulações por constelação (8PSK e 32-QAM) -------------------------------------------------
 # Cada grupo de bits (símbolo) é associado a um ponto (I, Q) da constelação e transmitido como
-# I·cos(2πft) - Q·sen(2πft), durante 0.1 s.
+# I·cos(2πft) - Q·sen(2πft). Cada bit dura 1 s e tem 100 amostras (como na banda-base, no ASK e no FSK),
+# então um símbolo de k bits dura k segundos e tem k x 100 amostras.
 
-FS              = 1000   # taxa de amostragem (Hz)
-F_PORTADORA     = 10     # frequência da portadora (Hz): 1 ciclo completo por símbolo
-DURACAO_SIMBOLO = 0.1    # segundos por símbolo
+FS              = 100    # taxa de amostragem (Hz): 100 amostras por bit
+F_PORTADORA     = 5      # frequência da portadora (Hz): número inteiro de ciclos por símbolo
+DURACAO_BIT     = 1      # segundos por bit (o símbolo dura bits_por_simbolo x DURACAO_BIT)
 
 # 8PSK: 3 bits por símbolo, 8 fases espaçadas de 45° (amplitude 1) com código Gray
 _GRAY_8PSK = ['000', '001', '011', '010', '110', '111', '101', '100']
@@ -110,7 +111,11 @@ _CONSTELACAO_8PSK = {
 _NIVEIS_QAM32 = [-5, -3, -1, 1, 3, 5]
 _PONTOS_32QAM = [(i, q) for i in _NIVEIS_QAM32 for q in _NIVEIS_QAM32
                  if not (abs(i) == 5 and abs(q) == 5)]
-_CONSTELACAO_32QAM = {f'{idx:05b}': ponto for idx, ponto in enumerate(_PONTOS_32QAM)}
+# Normalização de potência: divide os pontos pela raiz da energia média dos símbolos (√20), para que a
+# energia média da constelação seja 1, igual à do 8PSK (raio 1). Assim as modulações são comparáveis.
+_ESCALA_32QAM = np.sqrt(np.mean([i ** 2 + q ** 2 for i, q in _PONTOS_32QAM]))
+_CONSTELACAO_32QAM = {f'{idx:05b}': (ponto[0] / _ESCALA_32QAM, ponto[1] / _ESCALA_32QAM)
+                      for idx, ponto in enumerate(_PONTOS_32QAM)}
 
 
 def _modular_constelacao(dados: list[int], bits_por_simbolo: int, constelacao: dict) -> tuple[np.ndarray, np.ndarray]:
@@ -119,7 +124,7 @@ def _modular_constelacao(dados: list[int], bits_por_simbolo: int, constelacao: d
     bits_str += '0' * (-len(bits_str) % bits_por_simbolo)   # padding até completar o último símbolo
 
     simbolos = [bits_str[i:i + bits_por_simbolo] for i in range(0, len(bits_str), bits_por_simbolo)] #separa os bits em símbolos.
-    amostras_por_simbolo = int(DURACAO_SIMBOLO * FS) #quantidade de amostras de um símbolo (0.1 s x 1000 Hz = 100).
+    amostras_por_simbolo = int(bits_por_simbolo * DURACAO_BIT * FS) #quantidade de amostras de um símbolo (100 por bit: 300 no 8PSK e 500 no 32-QAM).
     t = np.arange(len(simbolos) * amostras_por_simbolo) / FS #eixo do tempo de todo o sinal.
     sinal = np.zeros_like(t) #sinal inicial (zeros), preenchido símbolo a símbolo.
 
