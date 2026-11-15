@@ -88,7 +88,7 @@ class Transmitter:
             return transmissor_entrelacamento(bits, edc)
         
         else:                                
-            return transmissor_crc(bits, edc)
+            return transmissor_crc(bits)
 
     def aplicar_enquadramento(self, bits: str) -> str: # Seleciona o enquadramento.
         # O texto é codificado em bytes (8 bits por caractere): não há padding a registrar.
