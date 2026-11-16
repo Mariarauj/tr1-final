@@ -20,7 +20,8 @@ tr1-final/
 │   ├── demodulacao.py       # Demodulação de todos os tipos acima
 │   └── ruido.py             # Ruído gaussiano (AWGN) e níveis de ruído
 ├── camada_enlace/
-│   ├── enquadramento.py     # Contagem de caracteres, Inserção de bytes, Inserção de bits
+│   ├── enquadramento.py     # Contagem de caracteres, Inserção de bytes, Inserção de bits (um quadro por vez)
+│   ├── quadros.py           # Monta/desmonta os quadros: enquadramento + EDC de cada quadro
 │   ├── deteccao_erros.py    # Paridade par, Checksum, CRC, Entrelaçamento de bits (EDC configurável)
 │   └── hamming.py           # Código de Hamming (codificação e correção)
 ├── cliente/
@@ -60,22 +61,33 @@ tr1-final/
 O **tamanho máximo do quadro** (1 a 255 bytes de dados, padrão 8) vale para os três protocolos; o
 último quadro pode ser menor. Na inserção de bits cada quadro tem as suas flags e o *stuffing*
 recomeça a cada quadro. O receptor não precisa conhecer o tamanho: os quadros se delimitam sozinhos.
+Na contagem de caracteres o cabeçalho conta os bytes de **dados** do quadro.
 
 ### Camada de Enlace — Detecção de Erros
 | Protocolo   | Descrição                                     | Tamanho do EDC (bits) |
 |-------------|-----------------------------------------------|-----------------------|
-| Paridade Par| 1 bit de paridade ao final da mensagem        | 1 (fixo)              |
+| Paridade Par| 1 bit de paridade por quadro                  | 1 (fixo)              |
 | Checksum    | Soma em complemento de 1 (palavras de N bits) | 8 (padrão), 16, 32    |
 | CRC         | CRC-32 do IEEE 802 (0x04C11DB7), definido pelo enunciado | 32 (fixo) |
-| Entrelaçamento de bits | Matriz de N colunas enviada coluna a coluna, com paridade par por coluna | 8 (padrão), 4, 16, 32 |
+| Entrelaçamento de bits | Matriz de N colunas enviada coluna a coluna, com paridade par por coluna | 8 (padrão), 16, 32 |
 
-O **tamanho do EDC** é escolhido na interface (as opções mudam conforme a detecção; paridade e CRC têm tamanho fixo) e vai no pacote
-para o receptor separar o código dos dados. A detecção é aplicada uma vez sobre todo o fluxo já enquadrado.
+O **EDC é calculado para cada quadro**. Na paridade, no checksum e no CRC ele cobre o quadro inteiro
+(cabeçalho ou flags + dados) e é anexado logo depois dele; no entrelaçamento a matriz (colunas + paridades) é a carga
+útil do quadro. O receptor confere o EDC de cada quadro e informa **quais quadros** chegaram com erro.
+O **tamanho do EDC** é escolhido na interface (as opções mudam conforme a detecção; paridade e CRC têm
+tamanho fixo) e vai no pacote para o receptor separar o código dos dados.
 
 ### Camada de Enlace — Correção de Erros
 | Protocolo | Descrição                                      |
 |-----------|------------------------------------------------|
 | Hamming   | Hamming(12,8) por byte: corrige 1 bit de erro por bloco |
+
+O **Hamming** e a **detecção de erros** podem ser desativados na interface (caixas "Controle de Erros"),
+mas nunca os dois ao mesmo tempo: o que sobrar ativo fica travado.
+
+### Meio de Comunicação — Ruído
+Níveis predefinidos (média μ = 0 V): Baixo (σ = 0,2 V), Médio (σ = 2,0 V) e Alto (σ = 5,0 V). A opção
+**Ruído Personalizado** libera os campos de média μ e desvio padrão σ.
 
 ---
 
@@ -84,7 +96,7 @@ para o receptor separar o código dos dados. A detecção é aplicada uma vez so
 ### Ambiente Virtual
 ```bash
 python3 -m venv venv                                  # cria o ambiente virtual
-source /home/mariaraujo/tr1-final/venv/bin/activate   # caminho específico do projeto
+source venv/bin/activate                              # ativa o ambiente (na pasta do projeto)
 pip install --no-cache-dir -r requirements.txt        # instala as dependências
 ```
 
@@ -115,11 +127,11 @@ python main_cliente.py
 ## Pipeline de Simulação
 
 ```
-[TX] texto → bits → Enquadramento → Detecção de Erros → Hamming
+[TX] texto → bits → quadros (enquadramento) com o EDC de cada quadro (detecção) → Hamming
      → Modulação Digital (banda-base) e Modulação por Portadora (em paralelo)
 
 [Canal] soma o ruído AWGN (μ, σ) a cada sinal
 
-[RX] Demodulação → Correção Hamming → Verificação da Detecção → Desenquadramento → bits → texto
+[RX] Demodulação → Correção Hamming → quadro a quadro: desenquadramento + conferência do EDC → bits → texto
 
 ```

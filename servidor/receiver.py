@@ -1,6 +1,8 @@
 '''
 Decodifica o sinal:
-  sinal portadora - ruído AWGN do canal - demodulação - correção Hamming - detecção de erros - desenquadramento - bits - texto
+  sinal portadora - ruído AWGN do canal - demodulação - correção Hamming - quadro a quadro (desenquadramento +
+  conferência do EDC de cada quadro) - bits - texto
+  (o Hamming e a detecção de erros só são desfeitos se o transmissor os aplicou)
   
 '''
 import json
@@ -12,18 +14,8 @@ import numpy as np
 
 from auxiliar import bits_para_texto, receber_exato
 from camada_enlace.hamming import receptor_hamming_blocos
-from camada_enlace.deteccao_erros import (
-    receptor_paridade,
-    receptor_checksum,
-    receptor_crc,
-    receptor_entrelacamento,
-    EDC_PADRAO, edc_valido,
-)
-from camada_enlace.enquadramento import (
-    receptor_contagem,
-    receptor_insercao_bytes,
-    receptor_insercao_bits,
-)
+from camada_enlace.deteccao_erros import EDC_PADRAO, edc_valido
+from camada_enlace.quadros import desmontar_quadros
 from camada_fisica.demodulacao import (
     demod_nrz_polar, demod_manchester, demod_bipolar,
     demod_ask, demod_fsk, demod_psk8, demod_qam32,
@@ -92,9 +84,14 @@ class Receiver:
         enquadr     = payload.get('enquadramento', 'Contagem de Caracteres')
         deteccao    = payload.get('deteccao', 'CRC')
         tam_quadro  = payload.get('tamanho_quadro')   # só para exibição: cada protocolo de enquadramento delimita os quadros sozinho
-        tam_edc     = payload.get('tamanho_edc', EDC_PADRAO.get(deteccao, 32))   # bits do EDC no fim dos dados
-        if not edc_valido(deteccao, tam_edc):
+        usar_hamming  = payload.get('usar_hamming', True)    # False = o transmissor não aplicou o Hamming
+        usar_deteccao = payload.get('usar_deteccao', True)   # False = os quadros vieram sem EDC
+        tam_edc     = payload.get('tamanho_edc') or EDC_PADRAO.get(deteccao, 32)   # bits do EDC de cada quadro
+        if usar_deteccao and not edc_valido(deteccao, tam_edc):
             raise ValueError(f'Tamanho de EDC inválido para {deteccao}: {tam_edc} bits')
+        if not (usar_hamming or usar_deteccao):   # o transmissor nunca envia os dois desativados.
+            raise ValueError('Pacote inválido: Hamming e detecção de erros desativados ao mesmo tempo')
+        deteccao_ativa = deteccao if usar_deteccao else None   # None = sem EDC nos quadros
         tempo       = np.array(payload.get('tempo', []))
         digital_limpo   = np.array(payload.get('sinal_digital', []))
         portadora_limpa = np.array(payload.get('sinal', []))
@@ -110,8 +107,11 @@ class Receiver:
         self._log(f'Enquadramento           : {enquadr}\n')
         if tam_quadro is not None:
             self._log(f'Tamanho máximo do quadro: {tam_quadro} byte(s)\n')
-        self._log(f'Detecção de erros       : {deteccao}\n')
-        self._log(f'Tamanho do EDC          : {tam_edc} bit(s)\n')
+        if usar_deteccao:
+            self._log(f'Detecção de erros       : {deteccao} (EDC de {tam_edc} bit(s) em cada quadro)\n')
+        else:
+            self._log('Detecção de erros       : desativada\n')
+        self._log(f'Hamming                 : {"ativado" if usar_hamming else "desativado"}\n')
 
         # Meio de comunicação: soma AWGN n ~ N(μ, σ) aos valores (V) de cada sinal (sorteios independentes)
         sinal_digital   = adicionar_ruido_gaussiano(digital_limpo, media, sigma)
@@ -129,12 +129,12 @@ class Receiver:
             self._executar_caminho(
                 f'BANDA-BASE ({mod_digital})', resposta['banda_base'],
                 lambda: self._demodular_digital(mod_digital, sinal_digital),
-                n_bits, n_dados, enquadr, deteccao, tam_edc)
+                n_bits, n_dados, enquadr, deteccao_ativa, tam_edc, usar_hamming)
 
             self._executar_caminho(
                 f'PORTADORA ({modulacao})', resposta['portadora'],
                 lambda: self._demodular_portadora(modulacao, tempo, sinal_portadora),
-                n_bits, n_dados, enquadr, deteccao, tam_edc)
+                n_bits, n_dados, enquadr, deteccao_ativa, tam_edc, usar_hamming)
 
         finally:
             # Mesmo que um caminho falhe, o cliente sempre recebe a resposta.
@@ -148,7 +148,7 @@ class Receiver:
             caminho['tempo'] = tempo.tolist()
         return caminho
 
-    def _executar_caminho(self, titulo, resultado, demodular, n_bits, n_dados, enquadr, deteccao, tam_edc):
+    def _executar_caminho(self, titulo, resultado, demodular, n_bits, n_dados, enquadr, deteccao, tam_edc, usar_hamming):
         # Demodula o sinal do caminho e desfaz o enlace; uma falha aqui não impede o outro caminho.
         self._log(f'── {titulo} ──\n')
         self._log(f'  - Mensagem esperada: {self._esperada}\n')
@@ -156,7 +156,7 @@ class Receiver:
             bits = ''.join(map(str, demodular()))[:n_bits]
             resultado['bits_ruidosos'] = bits    # o que chegou do canal, antes de qualquer tratamento
             self._log(f'  - Bits recebidos: {self._resumo(bits)}\n')
-            self._desfazer_enlace(bits, n_dados, enquadr, deteccao, tam_edc, resultado)
+            self._desfazer_enlace(bits, n_dados, enquadr, deteccao, tam_edc, usar_hamming, resultado)
 
         except Exception as exc:
             resultado['erro'] = str(exc)
@@ -193,46 +193,40 @@ class Receiver:
 
         raise ValueError(f'Modulação desconhecida: {nome}')
 
-    def _desfazer_enlace(self, bits: str, n_dados: int, enquadr: str, deteccao: str, tam_edc: int, resultado: dict):
-        # Cadeia RX comum aos dois caminhos: Hamming - detecção - desenquadramento - texto.
-        # Hamming: primeiro a ser desfeito; protege o quadro inteiro (flags inclusive)
-        bits_corrigidos, corrigidos = receptor_hamming_blocos(bits, n_dados)
-        if corrigidos:
-            diag_hamming = (f'{len(corrigidos)} bloco(s) com erro corrigido '
-                            f'(bloco, posição): {corrigidos}')
+    def _desfazer_enlace(self, bits: str, n_dados: int, enquadr: str, deteccao: str | None,
+                         tam_edc: int, usar_hamming: bool, resultado: dict):
+        # Cadeia RX comum aos dois caminhos: Hamming - quadros (desenquadramento + EDC de cada quadro) - texto.
+        # Hamming: primeiro a ser desfeito; protege o fluxo inteiro (flags e EDCs inclusive)
+        if usar_hamming:
+            bits_corrigidos, corrigidos = receptor_hamming_blocos(bits, n_dados)
+            if corrigidos:
+                diag_hamming = (f'{len(corrigidos)} bloco(s) com erro corrigido '
+                                f'(bloco, posição): {corrigidos}')
+            else:
+                diag_hamming = 'nenhum erro encontrado'
         else:
-            diag_hamming = 'nenhum erro encontrado'
+            bits_corrigidos, diag_hamming = bits[:n_dados], 'desativado'
         self._log(f'  - Diagnóstico do Hamming: {diag_hamming}\n')
 
-        # Detecção de erros: confere a integridade depois da correção (o EDC tem 'tam_edc' bits)
-        if deteccao == 'Paridade Par':
-            nome, (valido, bits_sem_det) = 'Paridade', receptor_paridade(bits_corrigidos)
-        elif deteccao == 'Checksum':
-            nome, (valido, bits_sem_det) = f'Checksum de {tam_edc} bits', receptor_checksum(bits_corrigidos, tam_edc)
-        elif deteccao == 'Entrelaçamento de Bits':
-            nome, (valido, bits_sem_det) = (f'Entrelaçamento ({tam_edc} colunas, paridade por coluna)',
-                                            receptor_entrelacamento(bits_corrigidos, tam_edc))
-        else:
-            nome, (valido, bits_sem_det) = 'CRC-32', receptor_crc(bits_corrigidos)
+        # Quadro a quadro: desenquadra e confere o EDC de cada quadro (se a detecção estiver ativa)
+        bits_desenq, com_erro, total = desmontar_quadros(bits_corrigidos, enquadr, deteccao, tam_edc)
 
-        if valido:
-            self._log(f'  - Diagnóstico da detecção de erros: {nome} válido, nenhum erro detectado\n')
+        if deteccao is None:
+            self._log('  - Diagnóstico da detecção de erros: desativada\n')
         else:
-            resultado['erro'] = 'erro de integridade detectado e não corrigido'
-            self._log(f'  - Diagnóstico da detecção de erros: {nome} ERRO DETECTADO '
-                      '(mensagem possivelmente corrompida)\n')
-
-        # Desenquadramento
-        if enquadr == 'Contagem de Caracteres':
-            bits_desenq = receptor_contagem(bits_sem_det)
-        elif enquadr == 'Inserção de Bytes':
-            bits_desenq = receptor_insercao_bytes(bits_sem_det)
-        else:
-            bits_desenq = receptor_insercao_bits(bits_sem_det)
+            nome = self._nome_deteccao(deteccao, tam_edc)
+            if com_erro:
+                lista = ', '.join(map(str, com_erro))
+                resultado['erro'] = f'erro detectado e não corrigido no(s) quadro(s) {lista}'
+                self._log(f'  - Diagnóstico da detecção de erros: {nome}: ERRO DETECTADO no(s) quadro(s) '
+                          f'{lista} de {total} (mensagem possivelmente corrompida)\n')
+            elif bits_desenq != '-1':
+                self._log(f'  - Diagnóstico da detecção de erros: {nome}: {total} quadro(s) verificado(s), '
+                          'nenhum erro detectado\n')
 
         if bits_desenq == '-1':
             resultado['erro'] = 'quadro inválido no desenquadramento'
-            self._log(f'  - Bits tratados: {self._resumo(bits_sem_det)} (desenquadramento falhou)\n')
+            self._log(f'  - Bits tratados: {self._resumo(bits_corrigidos)} (desenquadramento falhou)\n')
             self._log('  - Mensagem recebida: [ERRO] quadro inválido no desenquadramento\n')
             return
 
@@ -241,6 +235,17 @@ class Receiver:
         texto = bits_para_texto(bits_desenq)
         resultado['texto'] = texto
         self._log(f'  - Mensagem recebida: {texto}\n')
+
+    @staticmethod
+    def _nome_deteccao(deteccao: str, tam_edc: int) -> str:
+        # Nome da detecção para o log (com o tamanho do EDC, quando ele é configurável).
+        if deteccao == 'Paridade Par':
+            return 'Paridade'
+        elif deteccao == 'Checksum':
+            return f'Checksum de {tam_edc} bits'
+        elif deteccao == 'Entrelaçamento de Bits':
+            return f'Entrelaçamento ({tam_edc} colunas, paridade por coluna)'
+        return 'CRC-32'
 
     def _enviar_resposta(self, conn: socket.socket, resposta: dict):
         # Devolve ao transmissor, para cada caminho, o sinal ruidoso, os bits ruidosos e o texto decodificado.

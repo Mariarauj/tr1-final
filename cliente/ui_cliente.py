@@ -6,7 +6,7 @@ visualizando os sinais digitais e de portadora em tempo real.
 
 import gi #cria inteface gráfica
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, Pango # type: ignore
+from gi.repository import Gtk, Pango # type: ignore
 
 import matplotlib #equações matematicas
 import numpy as np #analise de dados
@@ -15,6 +15,8 @@ from cliente.transmitter import Transmitter
 from camada_fisica.ruido import NIVEIS_RUIDO
 from camada_enlace.deteccao_erros import TAMANHOS_EDC, EDC_PADRAO
 from camada_enlace.enquadramento import TAMANHO_QUADRO_PADRAO, TAMANHO_QUADRO_MAX
+
+RUIDO_PERSONALIZADO = 'Personalizado'   # identificador da 4ª opção do combo de ruído (μ e σ livres)
 try:
     # Canvas Cairo: desenha os textos dos eixos com o próprio Cairo/GTK
     from matplotlib.backends.backend_gtk3cairo import FigureCanvasGTK3Cairo as FigureCanvas
@@ -137,6 +139,23 @@ class ClienteUI(Gtk.Window):
         self.spin_quadro.set_hexpand(True)
         grade.attach(self.spin_quadro, 2, 3, 1, 1)
 
+        # Controle de erros: cada protocolo pode ser desativado, mas nunca os dois ao mesmo tempo.
+        lbl_ctrl = Gtk.Label()
+        lbl_ctrl.set_markup('<b>Controle de Erros</b>')
+        lbl_ctrl.set_xalign(0.0)
+        grade.attach(lbl_ctrl, 1, 2, 1, 1)
+
+        caixa_ctrl = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        self.chk_deteccao = Gtk.CheckButton(label='Detecção de erros')
+        self.chk_hamming  = Gtk.CheckButton(label='Hamming')
+        self.chk_deteccao.set_active(True)
+        self.chk_hamming.set_active(True)
+        caixa_ctrl.pack_start(self.chk_deteccao, False, False, 0)
+        caixa_ctrl.pack_start(self.chk_hamming, False, False, 0)
+        grade.attach(caixa_ctrl, 1, 3, 1, 1)
+        self.chk_deteccao.connect('toggled', self._atualizar_controle_de_erros)
+        self.chk_hamming.connect('toggled', self._atualizar_controle_de_erros)
+
         lbl_edc = Gtk.Label()
         lbl_edc.set_markup('<b>Tamanho do EDC (bits)</b>')
         lbl_edc.set_xalign(0.0)
@@ -153,13 +172,36 @@ class ClienteUI(Gtk.Window):
         lbl_ruido.set_xalign(0.0)
         grade.attach(lbl_ruido, 0, 2, 1, 1)
 
-        # Lista de níveis de ruído (Baixo, Médio, Alto), montada a partir de NIVEIS_RUIDO.
+        # Lista de níveis de ruído (Baixo, Médio, Alto), montada a partir de NIVEIS_RUIDO, mais a opção personalizada.
         self.combo_ruido = Gtk.ComboBoxText()
         for nivel, (_, sigma) in NIVEIS_RUIDO.items():
             self.combo_ruido.append(nivel, f'{nivel} (σ = {sigma:g} V)')
-        self.combo_ruido.set_active(0)
+        self.combo_ruido.append(RUIDO_PERSONALIZADO, 'Ruído Personalizado (μ e σ livres)')
         self.combo_ruido.set_hexpand(True)
         grade.attach(self.combo_ruido, 0, 3, 1, 1)
+
+        # Linha 4 — rótulos; linha 5 — campos de média (μ) e desvio padrão (σ) do ruído gaussiano.
+        # Os campos só podem ser editados na opção personalizada; nas demais mostram o nível escolhido.
+        lbl_media = Gtk.Label()
+        lbl_media.set_markup('<b>Média μ do ruído (V)</b>')
+        lbl_media.set_xalign(0.0)
+        grade.attach(lbl_media, 0, 4, 1, 1)
+        self.spin_media = Gtk.SpinButton.new_with_range(-10.0, 10.0, 0.1)
+        self.spin_media.set_digits(2)
+        self.spin_media.set_numeric(True)
+        grade.attach(self.spin_media, 0, 5, 1, 1)
+
+        lbl_sigma = Gtk.Label()
+        lbl_sigma.set_markup('<b>Desvio padrão σ do ruído (V)</b>')
+        lbl_sigma.set_xalign(0.0)
+        grade.attach(lbl_sigma, 1, 4, 1, 1)
+        self.spin_sigma = Gtk.SpinButton.new_with_range(0.0, 20.0, 0.1)
+        self.spin_sigma.set_digits(2)
+        self.spin_sigma.set_numeric(True)
+        grade.attach(self.spin_sigma, 1, 5, 1, 1)
+
+        self.combo_ruido.connect('changed', self._ao_mudar_ruido)
+        self.combo_ruido.set_active(0)   # Baixo como padrão (também preenche os campos μ e σ)
 
         # Botão Transmitir
         self.btn_transmitir = Gtk.Button(label='▶  Transmitir')
@@ -235,7 +277,7 @@ class ClienteUI(Gtk.Window):
         cb.set_active(0)
         return cb
 
-    # Atualiza as opções de tamanho do EDC conforme a detecção escolhida (a paridade só tem 1 bit).
+    # Atualiza as opções de tamanho do EDC conforme a detecção escolhida (paridade e CRC têm tamanho fixo).
     def _ao_mudar_deteccao(self, combo):
         deteccao = combo.get_active_text()
         opcoes = TAMANHOS_EDC.get(deteccao, [])
@@ -243,7 +285,29 @@ class ClienteUI(Gtk.Window):
         for op in opcoes:
             self.combo_edc.append(str(op), str(op))
         self.combo_edc.set_active(opcoes.index(EDC_PADRAO[deteccao]) if opcoes else -1)   # seleciona o padrão
-        self.combo_edc.set_sensitive(len(opcoes) > 1)   # com uma única opção não há o que escolher
+        self._atualizar_controle_de_erros()
+
+    # Garante que Hamming e detecção nunca fiquem desativados juntos: o que sobrou ativo é travado.
+    # Também libera as escolhas da detecção (tipo e tamanho do EDC) só quando ela está ativa.
+    def _atualizar_controle_de_erros(self, *_):
+        usa_det = self.chk_deteccao.get_active()
+        usa_ham = self.chk_hamming.get_active()
+        self.chk_hamming.set_sensitive(usa_det)    # com a detecção desativada, o Hamming não pode ser desmarcado.
+        self.chk_deteccao.set_sensitive(usa_ham)   # com o Hamming desativado, a detecção não pode ser desmarcada.
+        self.combo_deteccao.set_sensitive(usa_det)
+        n_opcoes = len(TAMANHOS_EDC.get(self.combo_deteccao.get_active_text(), []))
+        self.combo_edc.set_sensitive(usa_det and n_opcoes > 1)   # com uma única opção não há o que escolher
+
+    # Mostra os valores do nível de ruído escolhido; só a opção personalizada deixa μ e σ editáveis.
+    def _ao_mudar_ruido(self, combo):
+        nivel = combo.get_active_id()
+        personalizado = (nivel == RUIDO_PERSONALIZADO)
+        if not personalizado and nivel in NIVEIS_RUIDO:
+            media, sigma = NIVEIS_RUIDO[nivel]
+            self.spin_media.set_value(media)
+            self.spin_sigma.set_value(sigma)
+        self.spin_media.set_sensitive(personalizado)
+        self.spin_sigma.set_sensitive(personalizado)
 
     # Mostra uma janela de aviso com a mensagem informada.
     def _aviso(self, msg: str):
@@ -272,8 +336,12 @@ class ClienteUI(Gtk.Window):
         self.spin_quadro.update()   # confirma o valor digitado (sem precisar de Enter) antes de lê-lo
         self.transmitter.tamanho_quadro = self.spin_quadro.get_value_as_int()
         self.transmitter.tamanho_edc    = int(self.combo_edc.get_active_text())
-        self.transmitter.media_ruido, self.transmitter.sigma_ruido = (
-            NIVEIS_RUIDO[self.combo_ruido.get_active_id()])
+        self.transmitter.usar_deteccao  = self.chk_deteccao.get_active()
+        self.transmitter.usar_hamming   = self.chk_hamming.get_active()
+        self.spin_media.update()   # confirma os valores digitados antes de lê-los
+        self.spin_sigma.update()
+        self.transmitter.media_ruido = self.spin_media.get_value()   # nos níveis predefinidos, os campos já mostram o μ e o σ do nível
+        self.transmitter.sigma_ruido = self.spin_sigma.get_value()
 
         try:
             resultado = self.transmitter.processar(texto)
@@ -300,8 +368,10 @@ class ClienteUI(Gtk.Window):
             f"  - Mensagem transmitida: {resultado['texto']}\n"
             f"  - Mensagem convertida para bits: {resumo(resultado['bits_brutos'])}\n"
             f"  - Bits com enquadramento: {resumo(resultado['bits_enquadrado'])}\n"
-            f"  - Bits com a detecção de erro aplicada: {resumo(resultado['bits_deteccao'])}\n"
-            f"  - Bits com o hamming aplicado: {resumo(resultado['bits_hamming'])}\n"
+            f"  - Bits com a detecção de erro aplicada: "
+            f"{resumo(resultado['bits_deteccao']) if self.transmitter.usar_deteccao else '(desativada)'}\n"
+            f"  - Bits com o hamming aplicado: "
+            f"{resumo(resultado['bits_hamming']) if self.transmitter.usar_hamming else '(desativado)'}\n"
         )
 
         exibir = resultado

@@ -1,19 +1,18 @@
 '''
-Implementa os tipos de enquadramento:
+Implementa os tipos de enquadramento (um quadro por vez):
   1. Contagem de caracteres
   2. Inserção de bytes (flags + ESC byte)
   3. Inserção de bits  (flag 01111110 + bit stuffing)
 
-Todas as funções trabalham com strings de bits ('0' e '1') e retornam '-1' em caso de erro.
-Os bits que chegam são sempre múltiplos de 8, pois o texto é convertido em bytes (ASCII).
+Cada protocolo tem duas funções:
+  - quadro_...     : monta UM quadro a partir da carga útil (payload) recebida.
+  - ler_quadro_... : lê UM quadro que começa em uma posição do fluxo e devolve (payload, nova posição),
+                     ou None se o quadro for inválido.
 
-O tamanho máximo do quadro (em bytes de dados, sem contar cabeçalho nem flags) é configurável e vale
-para os três protocolos; o último quadro pode ser menor. O receptor não precisa conhecer esse valor,
-pois cada protocolo delimita seus quadros (cabeçalho com a contagem ou flags).
+A divisão da mensagem em quadros de até 'tamanho_quadro' bytes e o EDC de cada quadro ficam em quadros.py.
+Todas as funções trabalham com strings de bits ('0' e '1').
 
 '''
-
-#Retorna -1 em caso de erro
 
 TAMANHO_QUADRO_PADRAO = 8     # tamanho máximo de quadro padrão, em bytes de dados.
 TAMANHO_QUADRO_MAX    = 255   # o cabeçalho da contagem de caracteres tem 1 byte, então conta até 255.
@@ -25,52 +24,35 @@ def tamanho_quadro_valido(tamanho_quadro) -> bool:
     '''
     return isinstance(tamanho_quadro, int) and 1 <= tamanho_quadro <= TAMANHO_QUADRO_MAX
 
+
+
 # 1. Contagem de caracteres ---------------------------------------------------------------
+# Quadro = 1 byte de cabeçalho (quantidade de bytes de DADOS do quadro) + carga útil.
+# Se a carga útil tiver bits a mais que os dados (o EDC do entrelaçamento), o receptor recebe essa
+# quantidade em 'bits_extra'; assim o cabeçalho conta sempre até 255 bytes de dados.
 
-def transmissor_contagem(bits: str, tamanho_quadro: int = TAMANHO_QUADRO_PADRAO) -> str:
+def quadro_contagem(payload: str, n_bytes_dados: int) -> str:
     '''
-    Divide os bytes em quadros de até 'tamanho_quadro' bytes e coloca na frente de cada
-    quadro 1 byte (cabeçalho) com a quantidade de bytes do quadro.
+    Coloca na frente da carga útil 1 byte (cabeçalho) com a quantidade de bytes de dados do quadro.
     '''
-    if len(bits) % 8 != 0 or not tamanho_quadro_valido(tamanho_quadro): #só é possível enquadrar bytes completos, com tamanho de quadro válido.
-        return '-1'
-
-    lista_bytes = [bits[i:i+8] for i in range(0, len(bits), 8)] #separa a string de bits em bytes de 8 bits.
-    total = len(lista_bytes) #quantidade total de bytes a enquadrar.
-    quadros = [] #lista vazia para armazenar os quadros prontos.
-
-    i = 0 #posição do primeiro byte do quadro atual.
-    while i < total:
-        bloco = lista_bytes[i:i + tamanho_quadro] #pega até 'tamanho_quadro' bytes (o último quadro pode ser menor).
-        cabecalho = format(len(bloco), '08b') #cabeçalho = quantidade de bytes do quadro, escrita em 8 bits.
-        quadros.append(cabecalho + ''.join(bloco)) #quadro = cabeçalho + bytes de dados.
-        i += tamanho_quadro #avança para o próximo quadro.
-
-    return ''.join(quadros) #junta todos os quadros em uma única sequência de bits.
+    return format(n_bytes_dados, '08b') + payload #cabeçalho escrito em 8 bits + carga útil.
 
 
-def receptor_contagem(bits: str) -> str:
+def ler_quadro_contagem(bits: str, pos: int, bits_extra: int = 0) -> tuple[str, int] | None:
     '''
-    Lê o cabeçalho de cada quadro, extrai a quantidade de bytes indicada e descarta o cabeçalho.
+    Lê o cabeçalho, extrai a quantidade de bits indicada por ele (mais 'bits_extra') e descarta o cabeçalho.
     '''
-    if len(bits) % 8 != 0: #o fluxo deve ter bytes completos.
-        return '-1'
+    if pos + 8 > len(bits): #não há nem o byte de cabeçalho.
+        return None
 
-    conteudo = '' #armazena os dados extraídos, sem os cabeçalhos.
-    num_bytes = len(bits) // 8 #quantidade total de bytes recebidos.
-    idx = 0 #posição (em bytes) que está sendo lida.
+    n = int(bits[pos:pos + 8], 2) #converte o cabeçalho para número: quantos bytes de dados vêm a seguir.
+    inicio = pos + 8 #a carga útil começa depois do cabeçalho.
+    fim = inicio + n * 8 + bits_extra #posição onde a carga útil termina.
+    if fim > len(bits): #o cabeçalho diz que há mais bits do que realmente chegaram -> quadro inválido.
+        return None
 
-    while idx < num_bytes:
-        cabecalho = bits[idx*8:(idx+1)*8] #lê o byte de cabeçalho do quadro.
-        n = int(cabecalho, 2) #converte o cabeçalho para número: quantos bytes de dados vêm a seguir.
-        idx += 1 #pula o cabeçalho.
-        if idx + n > num_bytes: #o cabeçalho diz que há mais bytes do que realmente chegaram -> quadro inválido.
-            return '-1'
-        for _ in range(n):
-            conteudo += bits[idx*8:(idx+1)*8] #copia os n bytes de dados do quadro.
-            idx += 1
+    return bits[inicio:fim], fim
 
-    return conteudo
 
 
 # 2. Inserção de bytes ---------------------------------------------------------------------
@@ -79,60 +61,48 @@ _FLAG_IB  = '00100110'   # '&' (0x26): byte que marca o início e o fim de cada 
 _ESC_IB   = '00011011'   # ESC (0x1B): byte de escape, colocado antes de dados iguais à flag ou ao ESC.
 
 
-def transmissor_insercao_bytes(bits: str, tamanho_quadro: int = TAMANHO_QUADRO_PADRAO) -> str:
+def quadro_insercao_bytes(payload: str) -> str:
     '''
-    Cada quadro (até 'tamanho_quadro' bytes) é delimitado por uma flag no início e outra no fim.
-    Se um byte de dados for igual à flag ou ao ESC, um ESC é inserido antes dele (byte stuffing).
+    O quadro é delimitado por uma flag no início e outra no fim.
+    Se um byte da carga útil for igual à flag ou ao ESC, um ESC é inserido antes dele (byte stuffing).
     '''
-    if len(bits) % 8 != 0 or not tamanho_quadro_valido(tamanho_quadro): #só é possível enquadrar bytes completos, com tamanho de quadro válido.
-        return '-1'
+    corpo = '' #conteúdo do quadro, já com os escapes.
+    for i in range(0, len(payload), 8):
+        byte = payload[i:i + 8] #byte atual da carga útil.
+        if byte == _FLAG_IB or byte == _ESC_IB: #dado igual à flag ou ao ESC poderia confundir o receptor.
+            corpo += _ESC_IB #insere um ESC antes dele.
+        corpo += byte
 
-    lista_bytes = [bits[i:i+8] for i in range(0, len(bits), 8)] #separa a string de bits em bytes.
-    quadros = '' #armazena a sequência final de quadros.
-
-    while lista_bytes:
-        bloco = lista_bytes[:tamanho_quadro] #pega os bytes do quadro atual.
-        lista_bytes = lista_bytes[tamanho_quadro:] #remove esses bytes da lista.
-
-        corpo = '' #conteúdo do quadro, já com os escapes.
-        for byte in bloco:
-            if byte == _FLAG_IB or byte == _ESC_IB: #dado igual à flag ou ao ESC poderia confundir o receptor.
-                corpo += _ESC_IB #insere um ESC antes dele.
-            corpo += byte
-
-        quadros += _FLAG_IB + corpo + _FLAG_IB #quadro = flag + corpo + flag.
-
-    return quadros
+    return _FLAG_IB + corpo + _FLAG_IB #quadro = flag + corpo + flag.
 
 
-def receptor_insercao_bytes(bits: str) -> str:
+def ler_quadro_insercao_bytes(bits: str, pos: int) -> tuple[str, int] | None:
     '''
-    Percorre os bytes: descarta as flags e, ao encontrar um ESC, mantém o byte seguinte como dado.
+    Confere a flag inicial e percorre os bytes até a flag final: ao encontrar um ESC, mantém o byte seguinte como dado.
     '''
-    if len(bits) % 8 != 0: #o fluxo deve ter bytes completos.
-        return '-1'
+    if bits[pos:pos + 8] != _FLAG_IB: #o quadro precisa começar por uma flag.
+        return None
 
-    conteudo = '' #armazena os dados extraídos, sem flags e sem escapes.
-    num_bytes = len(bits) // 8 #quantidade total de bytes recebidos.
-    idx = 0 #posição (em bytes) que está sendo lida.
+    payload = '' #armazena os dados extraídos, sem flags e sem escapes.
+    idx = pos + 8 #posição do byte que está sendo lido (depois da flag inicial).
 
-    while idx < num_bytes:
-        byte = bits[idx*8:(idx+1)*8] #byte atual.
-        prox  = bits[(idx+1)*8:(idx+2)*8] #byte seguinte (usado quando o atual é um ESC).
+    while idx + 8 <= len(bits):
+        byte = bits[idx:idx + 8] #byte atual.
 
         if byte == _ESC_IB: #ESC: o byte seguinte é um dado e não deve ser interpretado.
-            if prox in (_FLAG_IB, _ESC_IB):
-                conteudo += prox #guarda o byte protegido (flag ou ESC dos dados).
-                idx += 2 #pula o ESC e o byte protegido.
-            else:
-                return '-1' #ESC seguido de um byte que não precisava de escape -> erro.
-        elif byte == _FLAG_IB: #flag de início/fim de quadro: não faz parte dos dados.
-            idx += 1
+            prox = bits[idx + 8:idx + 16] #byte protegido pelo ESC.
+            if prox not in (_FLAG_IB, _ESC_IB):
+                return None #ESC seguido de um byte que não precisava de escape -> erro.
+            payload += prox #guarda o byte protegido (flag ou ESC dos dados).
+            idx += 16 #pula o ESC e o byte protegido.
+        elif byte == _FLAG_IB: #flag final: o quadro terminou.
+            return payload, idx + 8
         else:
-            conteudo += byte #byte comum de dados.
-            idx += 1
+            payload += byte #byte comum de dados.
+            idx += 8
 
-    return conteudo
+    return None #os bits acabaram antes da flag final -> quadro inválido.
+
 
 
 # 3. Inserção de bits (bit stuffing) -------------------------------------------------------
@@ -182,43 +152,22 @@ def _destuff(dados_stuffed: str) -> str:
     return destuffed
 
 
-def transmissor_insercao_bits(bits: str, tamanho_quadro: int = TAMANHO_QUADRO_PADRAO) -> str:
+def quadro_insercao_bits(payload: str) -> str:
     '''
-    Cada quadro (até 'tamanho_quadro' bytes) é delimitado por uma flag no início e outra no fim,
-    e os seus dados recebem bit stuffing (o contador de 1 recomeça a cada quadro).
+    O quadro é delimitado por uma flag no início e outra no fim, e a carga útil recebe bit stuffing.
     '''
-    if len(bits) % 8 != 0 or not tamanho_quadro_valido(tamanho_quadro): #só é possível enquadrar bytes completos, com tamanho de quadro válido.
-        return '-1'
-
-    passo = tamanho_quadro * 8 #quantidade de bits de dados de um quadro cheio.
-    quadros = '' #armazena a sequência final de quadros.
-    for i in range(0, len(bits), passo):
-        quadros += _FLAG_BITS + _stuff(bits[i:i + passo]) + _FLAG_BITS #quadro = flag + dados com stuffing + flag.
-
-    return quadros
+    return _FLAG_BITS + _stuff(payload) + _FLAG_BITS #quadro = flag + dados com stuffing + flag.
 
 
-def receptor_insercao_bits(bits: str) -> str:
+def ler_quadro_insercao_bits(bits: str, pos: int) -> tuple[str, int] | None:
     '''
-    Percorre o fluxo quadro a quadro: localiza a flag inicial e a final, descarta-as e remove
-    o bit 0 inserido após cada sequência de cinco 1.
+    Confere a flag inicial, localiza a flag final, descarta-as e remove o bit 0 inserido após cada sequência de cinco 1.
     '''
-    flag = _FLAG_BITS
-    conteudo = '' #dados extraídos, sem flags e sem bits de stuffing.
-    pos = 0 #posição a partir da qual se procura o próximo quadro.
-    quadros = 0 #quantidade de quadros encontrados.
+    if bits[pos:pos + 8] != _FLAG_BITS: #o quadro precisa começar por uma flag.
+        return None
 
-    while True:
-        inicio = bits.find(flag, pos) #flag de início do quadro.
-        if inicio == -1: #acabaram os quadros.
-            break
-        fim = bits.find(flag, inicio + len(flag)) #flag de fim do mesmo quadro.
-        if fim == -1: #falta o delimitador final -> quadro inválido.
-            return '-1'
-        conteudo += _destuff(bits[inicio + len(flag):fim]) #dados entre as duas flags, sem o stuffing.
-        quadros += 1
-        pos = fim + len(flag) #o próximo quadro começa depois da flag final deste.
+    fim = bits.find(_FLAG_BITS, pos + 8) #posição da flag final (a primeira depois da inicial).
+    if fim == -1: #falta o delimitador final -> quadro inválido.
+        return None
 
-    if quadros == 0: #nenhuma flag encontrada -> quadro inválido.
-        return '-1'
-    return conteudo
+    return _destuff(bits[pos + 8:fim]), fim + 8 #dados entre as duas flags, sem o stuffing.

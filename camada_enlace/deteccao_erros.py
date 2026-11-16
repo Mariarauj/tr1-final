@@ -9,11 +9,15 @@ O transmissor recebe uma string de bits e devolve os mesmos bits com o código d
 O receptor recebe os bits com o código e devolve (valido, dados): se a integridade foi confirmada
 e os bits originais, já sem o código.
 
+Essas funções protegem uma sequência qualquer de bits. Quem as usa é quadros.py, por meio das funções do
+fim deste arquivo, aplicando-as a UM quadro de cada vez: cada quadro tem o seu próprio EDC.
+
 O tamanho do EDC (em bits) é configurável, dentro das opções de cada protocolo:
   - Paridade par : 1 bit (fixo, é a própria definição do código)
   - Checksum     : 8, 16 ou 32 bits (tamanho da palavra somada = tamanho do resultado)
   - CRC          : 32 bits (fixo: o enunciado define o polinômio gerador CRC-32 do padrão IEEE 802)
-  - Entrelaçamento: 4, 8, 16 ou 32 bits (um bit de paridade por coluna = quantidade de colunas)
+  - Entrelaçamento: 8, 16 ou 32 bits (um bit de paridade por coluna = quantidade de colunas; múltiplos de 8
+                    para que a carga útil do quadro continue sendo formada por bytes inteiros)
 
 '''
 
@@ -22,7 +26,7 @@ TAMANHOS_EDC = {
     'Paridade Par'          : [1],
     'Checksum'              : [8, 16, 32],
     'CRC'                   : [32],
-    'Entrelaçamento de Bits': [4, 8, 16, 32],
+    'Entrelaçamento de Bits': [8, 16, 32],
 }
 
 # Tamanho de EDC padrão de cada detecção.
@@ -188,3 +192,65 @@ def receptor_entrelacamento(bits: str, colunas: int = 8) -> tuple[bool, str]:
     # reconstrói a ordem original: bit i está na coluna i % colunas, posição i // colunas
     dado = ''.join(lista[i % colunas][i // colunas] for i in range(n_dados))
     return (valido, dado)
+
+
+
+# 5. EDC de UM quadro (usado por quadros.py) -----------------------------------------------
+# Paridade, checksum e CRC calculam o EDC sobre o QUADRO INTEIRO (cabeçalho ou flags + dados), o que
+# protege também a delimitação, e o EDC é anexado logo depois do quadro. No entrelaçamento a matriz
+# inteira (colunas + paridades) substitui os dados e vai dentro do quadro, como carga útil.
+
+def payload_do_quadro(deteccao: str, dados: str, tam_edc: int) -> str:
+    '''
+    Devolve a carga útil do quadro: no entrelaçamento, a matriz com as paridades; nos demais, os próprios dados.
+    '''
+    if deteccao == 'Entrelaçamento de Bits':
+        return transmissor_entrelacamento(dados, tam_edc)
+    return dados
+
+
+def edc_do_quadro(deteccao: str, quadro: str, tam_edc: int) -> str:
+    '''
+    Calcula o EDC que será anexado depois do quadro ('' no entrelaçamento, cujo EDC fica dentro do quadro).
+    '''
+    if deteccao == 'Paridade Par':
+        completo = transmissor_paridade(quadro)
+    elif deteccao == 'Checksum':
+        completo = transmissor_checksum(quadro, tam_edc)
+    elif deteccao == 'CRC':
+        completo = transmissor_crc(quadro)
+    else:
+        return '' #entrelaçamento: não há EDC fora do quadro.
+
+    return completo[len(quadro):] #o EDC são os bits que foram acrescentados ao quadro.
+
+
+def verificar_quadro(deteccao: str, quadro: str, payload: str, sufixo: str, tam_edc: int) -> tuple[bool, str]:
+    '''
+    Confere a integridade de um quadro recebido e devolve (valido, dados do quadro, sem o EDC).
+    '''
+    if deteccao == 'Entrelaçamento de Bits':
+        return receptor_entrelacamento(payload, tam_edc) #confere as paridades das colunas da carga útil.
+
+    completo = quadro + sufixo #quadro + EDC, como o receptor de cada protocolo espera.
+    if deteccao == 'Paridade Par':
+        valido, _ = receptor_paridade(completo)
+    elif deteccao == 'Checksum':
+        valido, _ = receptor_checksum(completo, tam_edc)
+    else:
+        valido, _ = receptor_crc(completo)
+    return (valido, payload) #o EDC recalculado sobre o quadro é igual ao recebido?
+
+
+def tamanho_sufixo_edc(deteccao: str, tam_edc: int) -> int:
+    '''
+    Quantidade de bits de EDC que vêm depois do quadro (0 no entrelaçamento, cujo EDC fica dentro do quadro).
+    '''
+    return 0 if deteccao == 'Entrelaçamento de Bits' else tam_edc
+
+
+def tamanho_extra_payload(deteccao: str, tam_edc: int) -> int:
+    '''
+    Quantidade de bits que a carga útil do quadro tem além dos dados (só o entrelaçamento acrescenta bits).
+    '''
+    return tam_edc if deteccao == 'Entrelaçamento de Bits' else 0

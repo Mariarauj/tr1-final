@@ -30,7 +30,7 @@ class ServidorUI(Gtk.Window):
         header.pack_start(titulo)
         subtitulo = Gtk.Label()
         subtitulo.set_markup(
-            '<span font="10" foreground="#7f8c8d">Terminal de log</span>'
+            '<span font="10" foreground="#7f8c8d">Registro da recepção</span>'
         )
         header.pack_end(subtitulo)
         self.set_titlebar(header)
