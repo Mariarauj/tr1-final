@@ -81,24 +81,31 @@ def demod_ask(tempo: np.ndarray, sinal: np.ndarray) -> list[int]:
     return bits
 
 
+def _energia_na_frequencia(segmento: np.ndarray, t_seg: np.ndarray, freq: float) -> float:
+    '''
+    Correlaciona o segmento com cos e sen na frequência dada; a soma dos quadrados mede a energia do sinal nessa frequência.
+    '''
+    c = np.sum(segmento * np.cos(2 * np.pi * freq * t_seg)) #correlação com o cosseno.
+    s = np.sum(segmento * np.sin(2 * np.pi * freq * t_seg)) #correlação com o seno (cos + sen deixam a medida independente da fase).
+    return float(c * c + s * s)
+
+
 def demod_fsk(tempo: np.ndarray, sinal: np.ndarray) -> list[int]:
     '''
-    Encontra a frequência dominante de cada bit (via FFT) e escolhe a frequência mais próxima: f1 = bit 1, f0 = bit 0.
+    Correlaciona cada bit com as duas frequências e escolhe a de maior energia: f1 = bit 1 e f0 = bit 0.
     '''
     f1, f0 = 2, 1 #frequências usadas na modulação para os bits 1 e 0.
     amostras_por_bit = 100
     bits = []
-    dt = tempo[1] - tempo[0] if len(tempo) > 1 else 0.01 #intervalo entre amostras.
 
     for i in range(0, len(sinal), amostras_por_bit):
-        segmento = sinal[i:i + amostras_por_bit]
+        segmento = sinal[i:i + amostras_por_bit] #amostras de um bit.
         if len(segmento) < amostras_por_bit:
             break
-        fft = np.abs(np.fft.fft(segmento)) #Fast Fourier Transform
-        freqs = np.fft.fftfreq(len(segmento), d=dt) #qual frequencia corresponde a cada amplitude da FFT
-        mask = freqs > 0 #ignora frequencias negativas
-        freq_dom = freqs[mask][np.argmax(fft[mask])] #armax = posição da maior amplitude e freq_dom = retorna sua frequencia correspondente
-        bits.append(1 if abs(freq_dom - f1) < abs(freq_dom - f0) else 0) #bit 1 se a frequência dominante está mais perto de f1.
+        t_seg = tempo[i:i + amostras_por_bit] #instantes de tempo correspondentes.
+        e1 = _energia_na_frequencia(segmento, t_seg, f1) #energia em f1.
+        e0 = _energia_na_frequencia(segmento, t_seg, f0) #energia em f0.
+        bits.append(1 if e1 > e0 else 0) #bit 1 se f1 tem mais energia que f0.
     return bits
 
 

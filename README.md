@@ -32,6 +32,8 @@ tr1-final/
     └── ui_servidor.py       # Interface GTK3 do Receptor
 ```
 
+Correspondência com as partes pedidas no enunciado: `camada_fisica/` é a **CamadaFisica**; `camada_enlace/` é a **CamadaEnlace**; `ui_cliente.py` e `ui_servidor.py` são a **InterfaceGUI**; `main_cliente.py` e `main_servidor.py` são o **Simulador**.
+
 ---
 
 ## Protocolos Implementados
