@@ -11,6 +11,7 @@ from gi.repository import Gtk, Pango # type: ignore
 import matplotlib #equações matematicas
 import numpy as np #analise de dados
 from matplotlib.figure import Figure
+from auxiliar import resumir_bits
 from cliente.transmitter import Transmitter
 from camada_fisica.ruido import NIVEIS_RUIDO
 from camada_enlace.deteccao_erros import TAMANHOS_EDC, EDC_PADRAO
@@ -360,18 +361,14 @@ class ClienteUI(Gtk.Window):
             self._aviso(str(exc))
 
         # Exibe etapas do pipeline
-        # Corta as sequências de bits longas para caber na tela.
-        def resumo(s, max_len=80):
-            return s[:max_len] + ('…' if len(s) > max_len else '')
-
         saida = (
             f"  - Mensagem transmitida: {resultado['texto']}\n"
-            f"  - Mensagem convertida para bits: {resumo(resultado['bits_brutos'])}\n"
-            f"  - Bits com enquadramento: {resumo(resultado['bits_enquadrado'])}\n"
+            f"  - Mensagem convertida para bits: {resumir_bits(resultado['bits_brutos'])}\n"
+            f"  - Bits com enquadramento: {resumir_bits(resultado['bits_enquadrado'])}\n"
             f"  - Bits com a detecção de erro aplicada: "
-            f"{resumo(resultado['bits_deteccao']) if self.transmitter.usar_deteccao else '(desativada)'}\n"
+            f"{resumir_bits(resultado['bits_deteccao']) if self.transmitter.usar_deteccao else '(desativada)'}\n"
             f"  - Bits com o hamming aplicado: "
-            f"{resumo(resultado['bits_hamming']) if self.transmitter.usar_hamming else '(desativado)'}\n"
+            f"{resumir_bits(resultado['bits_hamming']) if self.transmitter.usar_hamming else '(desativado)'}\n"
         )
 
         exibir = resultado

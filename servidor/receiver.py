@@ -12,7 +12,7 @@ import threading
 
 import numpy as np
 
-from auxiliar import bits_para_texto, receber_exato
+from auxiliar import bits_para_texto, receber_exato, resumir_bits
 from camada_enlace.hamming import receptor_hamming_blocos
 from camada_enlace.deteccao_erros import EDC_PADRAO, edc_valido
 from camada_enlace.quadros import desmontar_quadros
@@ -155,7 +155,7 @@ class Receiver:
         try:
             bits = ''.join(map(str, demodular()))[:n_bits]
             resultado['bits_ruidosos'] = bits    # o que chegou do canal, antes de qualquer tratamento
-            self._log(f'  - Bits recebidos: {self._resumo(bits)}\n')
+            self._log(f'  - Bits recebidos: {resumir_bits(bits)}\n')
             self._desfazer_enlace(bits, n_dados, enquadr, deteccao, tam_edc, usar_hamming, resultado)
 
         except Exception as exc:
@@ -226,11 +226,11 @@ class Receiver:
 
         if bits_desenq == '-1':
             resultado['erro'] = 'quadro inválido no desenquadramento'
-            self._log(f'  - Bits tratados: {self._resumo(bits_corrigidos)} (desenquadramento falhou)\n')
+            self._log(f'  - Bits tratados: {resumir_bits(bits_corrigidos)} (desenquadramento falhou)\n')
             self._log('  - Mensagem recebida: [ERRO] quadro inválido no desenquadramento\n')
             return
 
-        self._log(f'  - Bits tratados: {self._resumo(bits_desenq)}\n')
+        self._log(f'  - Bits tratados: {resumir_bits(bits_desenq)}\n')
 
         texto = bits_para_texto(bits_desenq)
         resultado['texto'] = texto
@@ -256,7 +256,3 @@ class Receiver:
     #little funções auxiliares
     def _log(self, msg: str):
         self.callback_ui(msg)
-
-    @staticmethod
-    def _resumo(s: str, max_len: int = 80) -> str:
-        return s[:max_len] + ('…' if len(s) > max_len else '')

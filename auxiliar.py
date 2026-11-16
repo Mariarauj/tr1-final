@@ -32,3 +32,9 @@ def receber_exato(conn, n: int) -> bytes:
         buf += pacote
 
     return buf
+
+
+def resumir_bits(bits: str, max_len: int = 80) -> str:
+    #Corta sequências de bits longas para caber na tela (usada nos painéis do transmissor e do receptor).
+
+    return bits[:max_len] + ('…' if len(bits) > max_len else '')
