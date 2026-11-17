@@ -20,4 +20,6 @@ def adicionar_ruido_gaussiano(sinal: np.ndarray, media: float = 0.0, sigma: floa
     Meio de comunicação (AWGN): soma n ~ N(media, sigma) a cada amostra do sinal.
     '''
     ruido = np.random.normal(media, sigma, sinal.shape) #sorteia um valor de ruído para cada amostra.
+    #media = valor em torno do qual os números sorteados ficam
+    #sigma = desvio padrão, que indica o quanto os números sorteados podem variar em torno da média.
     return sinal + ruido #sinal ruidoso = sinal original + ruído.

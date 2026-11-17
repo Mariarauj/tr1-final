@@ -7,6 +7,9 @@ As funções devem receber um trem de bits (0s e 1s) - 'dados' - e retornar valo
 '''
 import numpy as np #facilita operações matemáticas e consequente manipulação de sinais.
 
+# Amostragem: cada bit dura 1 s e é representado por 100 amostras (valor usado em todas as modulações e demodulações).
+amostras_por_bit = 100
+
 # Modulações Digitais (banda-base) -------------------------------------------------------------
 
 def nrz_polar(dados: list[int]) -> np.ndarray: 
@@ -14,7 +17,6 @@ def nrz_polar(dados: list[int]) -> np.ndarray:
     Os bits 0 serão representados como -V e os bits 1 como +V.
     '''
     V = 1 #define a amplitude do sinal
-    amostras_por_bit = 100 #define 100 amostras por bit.
     sinal = np.array([-V if bit == 0 else V for bit in dados]) #define o sinal -V e V para bit 0 e V para bit 1.
     return np.repeat(sinal, amostras_por_bit).astype(float) #repete cada elemento do sinal 100x -> [1, -1] = [1, 1, ..., 1, -1, -1, ..., -1]
 
@@ -41,7 +43,6 @@ def bipolar(dados: list[int]) -> np.ndarray:
     Os bits 0 serão definidos por V = 0 e os bits 1 como uma alternância entre +V e -V.
     '''
     V = 1 #define a amplitude do sinal
-    amostras_por_bit = 100 #define 100 amostras por bit.
     estado = 1 #define a polaridade do próximo bit 1.
     sinal = []
     for bit in dados:
@@ -62,7 +63,6 @@ def ask(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
     '''
     A = 1 #define a amplitude da portadora.
     f = 2 #define a frequência da portadora (2 ciclos por bit).
-    amostras_por_bit = 100 #define 100 amostras por bit.
     tempo_total = [] #lista vazia para armazenar o eixo do tempo.
     sinal = [] #lista vazia para armazenar o sinal modulado.
     for i, bit in enumerate(dados):
@@ -81,7 +81,6 @@ def fsk(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
     '''
     A = 1 #define a amplitude da portadora.
     f1, f0 = 2, 1 #define as frequências: 2 Hz para o bit 1 e 1 Hz para o bit 0.
-    amostras_por_bit = 100 #define 100 amostras por bit.
     tempo_total = [] #lista vazia para armazenar o eixo do tempo.
     sinal = [] #lista vazia para armazenar o sinal modulado.
     for i, bit in enumerate(dados):
@@ -93,12 +92,10 @@ def fsk(dados: list[int]) -> tuple[np.ndarray, np.ndarray]:
 
 # Modulações por constelação (8PSK e 32-QAM) -------------------------------------------------
 # Cada grupo de bits (símbolo) é associado a um ponto (I, Q) da constelação e transmitido como
-# I·cos(2πft) - Q·sen(2πft). Cada bit dura 1 s e tem 100 amostras (como na banda-base, no ASK e no FSK),
-# então um símbolo de k bits dura k segundos e tem k x 100 amostras.
+# I·cos(2πft) - Q·sen(2πft). Cada bit dura 1 s e tem 'amostras_por_bit' amostras (como na banda-base, no ASK e no FSK),
+# então um símbolo de k bits dura k segundos e tem k x amostras_por_bit amostras.
 
-FS              = 100    # taxa de amostragem (Hz): 100 amostras por bit
 F_PORTADORA     = 5      # frequência da portadora (Hz): número inteiro de ciclos por símbolo
-DURACAO_BIT     = 1      # segundos por bit (o símbolo dura bits_por_simbolo x DURACAO_BIT)
 
 # 8PSK: 3 bits por símbolo, 8 fases espaçadas de 45° (amplitude 1) com código Gray
 _GRAY_8PSK = ['000', '001', '011', '010', '110', '111', '101', '100']
@@ -124,8 +121,8 @@ def _modular_constelacao(dados: list[int], bits_por_simbolo: int, constelacao: d
     bits_str += '0' * (-len(bits_str) % bits_por_simbolo)   # padding até completar o último símbolo
 
     simbolos = [bits_str[i:i + bits_por_simbolo] for i in range(0, len(bits_str), bits_por_simbolo)] #separa os bits em símbolos.
-    amostras_por_simbolo = int(bits_por_simbolo * DURACAO_BIT * FS) #quantidade de amostras de um símbolo (100 por bit: 300 no 8PSK e 500 no 32-QAM).
-    t = np.arange(len(simbolos) * amostras_por_simbolo) / FS #eixo do tempo de todo o sinal.
+    amostras_por_simbolo = bits_por_simbolo * amostras_por_bit #quantidade de amostras de um símbolo (100 por bit: 300 no 8PSK e 500 no 32-QAM).
+    t = np.arange(len(simbolos) * amostras_por_simbolo) / amostras_por_bit #eixo do tempo (s) de todo o sinal: cada bit dura 1 s.
     sinal = np.zeros_like(t) #sinal inicial (zeros), preenchido símbolo a símbolo.
 
     for i, s in enumerate(simbolos):

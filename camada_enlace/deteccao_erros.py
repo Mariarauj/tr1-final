@@ -104,7 +104,7 @@ def receptor_checksum(bits: str, tam: int = 8) -> tuple[bool, str]:
 # 3. CRC-32 (IEEE 802.3) -------------------------------------------------------------------
 
 _CRC32_POLINOMIO = 0x04C11DB7 #polinômio gerador do CRC-32 (padrão IEEE 802).
-_CRC32_XOR_OUT   = 0xFFFFFFFF #máscara de 32 bits: isola o resto da divisão e inverte o resultado.
+_CRC32_MASCARA   = 0xFFFFFFFF #máscara de 32 bits: isola o resto da divisão.
 
 
 def _crc32_calcular(bits: str) -> str:
@@ -122,7 +122,7 @@ def _crc32_calcular(bits: str) -> str:
         if msg & (1 << (n + 31 - i)): #se o bit mais significativo atual é 1...
             msg ^= _CRC32_POLINOMIO << (n - 1 - i) #...faz o XOR com o polinômio alinhado a esse bit.
 
-    crc = (msg & _CRC32_XOR_OUT) ^ _CRC32_XOR_OUT #resto da divisão (32 bits finais), invertido.
+    crc = msg & _CRC32_MASCARA #resto da divisão (os 32 bits finais) é o CRC.
     return format(crc, '032b') #escreve o CRC em 32 bits.
 
 

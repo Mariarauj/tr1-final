@@ -8,7 +8,7 @@ estimado (lista de 0s e 1s). Cada demodulador é o inverso do modulador correspo
 '''
 import numpy as np #facilita operações matemáticas e manipulação de sinais.
 from camada_fisica.modulacao import (
-    FS, F_PORTADORA, DURACAO_BIT, _CONSTELACAO_8PSK, _CONSTELACAO_32QAM,
+    amostras_por_bit, F_PORTADORA, _CONSTELACAO_8PSK, _CONSTELACAO_32QAM,
 )
 
 # Demodulação digital (Banda base) --------------------------------------------------------
@@ -17,7 +17,6 @@ def demod_nrz_polar(sinal: np.ndarray) -> list[int]:
     '''
     Calcula a média de cada bit: média positiva = bit 1 e média negativa = bit 0.
     '''
-    amostras_por_bit = 100 #mesma quantidade de amostras por bit usada na modulação.
     bits = [] #lista vazia para armazenar os bits recuperados.
     for i in range(0, len(sinal), amostras_por_bit):
         segmento = sinal[i:i + amostras_por_bit] #amostras de um bit.
@@ -31,7 +30,6 @@ def demod_manchester(sinal: np.ndarray) -> list[int]:
     '''
     Compara a média das duas metades de cada bit: primeira > segunda = bit 1 (transição +V -> -V).
     '''
-    amostras_por_bit = 100   # 2 metades de 50 amostras (igual ao modulador)
     bits = []
     for i in range(0, len(sinal), amostras_por_bit):
         segmento = sinal[i:i + amostras_por_bit] #amostras de um bit.
@@ -48,7 +46,6 @@ def demod_bipolar(sinal: np.ndarray) -> list[int]:
     '''
     Média próxima de 0 = bit 0; média próxima de +V ou -V = bit 1.
     '''
-    amostras_por_bit = 100
     bits = []
     for i in range(0, len(sinal), amostras_por_bit):
         segmento = sinal[i:i + amostras_por_bit]
@@ -68,7 +65,6 @@ def demod_ask(tempo: np.ndarray, sinal: np.ndarray) -> list[int]:
     ruído gaussiano tem média zero nela, ao contrário da média do valor absoluto, que o ruído eleva.
     '''
     A, f = 1, 2 #amplitude e frequência usadas na modulação.
-    amostras_por_bit = 100
     limiar = A / 2 #limiar de decisão: metade da amplitude.
     bits = []
     for i in range(0, len(sinal), amostras_por_bit):
@@ -95,7 +91,6 @@ def demod_fsk(tempo: np.ndarray, sinal: np.ndarray) -> list[int]:
     Correlaciona cada bit com as duas frequências e escolhe a de maior energia: f1 = bit 1 e f0 = bit 0.
     '''
     f1, f0 = 2, 1 #frequências usadas na modulação para os bits 1 e 0.
-    amostras_por_bit = 100
     bits = []
 
     for i in range(0, len(sinal), amostras_por_bit):
@@ -114,7 +109,7 @@ def _demodular_constelacao(tempo: np.ndarray, sinal: np.ndarray, constelacao: di
     Correlaciona cada símbolo com cos/sen para recuperar (I, Q) e decide pelo ponto mais próximo.
     '''
     bits_por_simbolo = len(next(iter(constelacao))) #quantidade de bits de cada símbolo (3 no 8PSK e 5 no 32-QAM).
-    amostras_por_simbolo = int(bits_por_simbolo * DURACAO_BIT * FS) #quantidade de amostras de um símbolo (100 por bit).
+    amostras_por_simbolo = bits_por_simbolo * amostras_por_bit #quantidade de amostras de um símbolo (100 por bit).
     bits = []
 
     for i in range(0, len(sinal) - amostras_por_simbolo + 1, amostras_por_simbolo):
